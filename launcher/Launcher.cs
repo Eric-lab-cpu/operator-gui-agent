@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 // Operator —— GUI Agent 桌面应用的启动器
 //
@@ -346,10 +347,27 @@ namespace OperatorLauncher
 
         // ── 托盘 ──────────────────────────────────────────────
         static bool SilentMode = false;
+        // 让托盘图标默认显示在通知区（而不是折叠菜单里）
+        static void PromoteTray()
+        {
+            try
+            {
+                string id = "{8F1A2C3D-4E5B-4A6C-9D7E-0A1B2C3D4E5F}";
+                using (var k = Registry.CurrentUser.CreateSubKey(@"Control Panel\NotifyIconSettings\" + id))
+                {
+                    if (k == null) return;
+                    k.SetValue("ExecutablePath", Path.Combine(BaseDir, "OperatorTray.exe"), RegistryValueKind.String);
+                    k.SetValue("IsPromoted", 1, RegistryValueKind.DWord);
+                    k.SetValue("InitialTooltip", "Operator", RegistryValueKind.String);
+                }
+            }
+            catch { }
+        }
         static void EnsureTray()
         {
             try
             {
+                PromoteTray();
                 if (Process.GetProcessesByName("OperatorTray").Length > 0) return;
                 string tray = Path.Combine(BaseDir, "OperatorTray.exe");
                 if (!File.Exists(tray)) return;

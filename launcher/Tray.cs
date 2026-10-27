@@ -6,6 +6,7 @@ using System.Net;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 // OperatorTray —— 托盘宿主
 //
@@ -14,8 +15,26 @@ using System.Windows.Forms;
 //       「状态窗口」是一个正常窗口，会在任务栏留下按钮。
 namespace OperatorTray
 {
+    static class NativeIcon
+    {
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        public static extern bool DestroyIcon(IntPtr h);
+    }
+
     static class Program
     {
+        static string LogPath = "";
+
+        static void Log(string msg)
+        {
+            try
+            {
+                if (LogPath == "") LogPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tray.log");
+                File.AppendAllText(LogPath, DateTime.Now.ToString("HH:mm:ss") + " " + msg + "\r\n");
+            }
+            catch { }
+        }
+
         static int Port = 6360;
         static string BaseDir = "";
         static NotifyIcon tray;
@@ -23,7 +42,8 @@ namespace OperatorTray
         static System.Windows.Forms.Timer timer;
         static bool lastOk = false;
         static int downCount = 0;      // 服务连续不可用次数
-        static int workerDown = 0;     // worker 连续离线次数
+        static int workerDown = 0;
+        static bool promoted = false;     // worker 连续离线次数
 
         [STAThread]
         static void Main(string[] args)
@@ -40,7 +60,11 @@ namespace OperatorTray
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
+            Log("启动 tray base=" + BaseDir + " port=" + Port);
             BuildTray();
+            Log("托盘已建 visible=" + tray.Visible);
+            PromoteIcon();
+            Log("提升流程结束");
             BuildForm();
 
             timer = new System.Windows.Forms.Timer { Interval = 3000 };
@@ -98,6 +122,43 @@ namespace OperatorTray
             catch { return null; }
         }
 
+        // ── 让图标默认出现在通知区（Windows 11 默认会把新图标收进折叠区）──
+        static void PromoteIcon()
+        {
+            // Win11 的通知区设置键名是「可执行文件路径的哈希」。
+            // 这里用 RegistryKey.OpenBaseKey + 显式只读权限，尽量绕开 ACL 限制。
+            try
+            {
+                string self = Path.Combine(BaseDir, "OperatorTray.exe").ToLowerInvariant();
+                using (var baseKey = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64))
+                using (var root = baseKey.OpenSubKey(@"Control Panel\NotifyIconSettings", false))
+                {
+                    if (root == null) { Log("通知区注册表不可用"); return; }
+                    string[] names = root.GetSubKeyNames();
+                    Log("通知区条目数: " + names.Length);
+                    foreach (string name in names)
+                    {
+                        using (var k = root.OpenSubKey(name, false))
+                        {
+                            if (k == null) continue;
+                            string exe = (k.GetValue("ExecutablePath") as string) ?? "";
+                            if (exe.ToLowerInvariant() != self) continue;
+                            Log("找到本程序条目: " + name + " IsPromoted=" + k.GetValue("IsPromoted"));
+                            using (var kw = root.OpenSubKey(name, true))
+                            {
+                                if (kw == null) { Log("条目不可写"); return; }
+                                kw.SetValue("IsPromoted", 1, RegistryValueKind.DWord);
+                                Log("已提升");
+                                promoted = true;
+                            }
+                            return;
+                        }
+                    }
+                    Log("尚无本程序条目（图标首次显示后由 Explorer 创建）");
+                }
+            }
+            catch (Exception e) { Log("提升失败: " + e.Message); }
+        }
         // ── 托盘 ─────────────────────────────────────────────
         static void BuildTray()
         {
@@ -139,7 +200,11 @@ namespace OperatorTray
                     g.FillRectangle(b2, 14, 10, 4, 8);
                 }
             }
-            return Icon.FromHandle(bmp.GetHicon());
+            IntPtr h = bmp.GetHicon();
+            Icon ico = (Icon)Icon.FromHandle(h).Clone();
+            NativeIcon.DestroyIcon(h);
+            bmp.Dispose();
+            return ico;
         }
 
         // ── 状态窗口（任务栏有按钮）──────────────────────────
@@ -191,6 +256,7 @@ namespace OperatorTray
                 stateLine = "服务：运行中\nworker：" + (worker ? "在线" : "离线") + "\n任务：" + (running ? "执行中" : "空闲");
             }
 
+            if (!promoted) PromoteIcon();   // 还没提升就每轮重试一次
             // ── 守护：托盘是唯一长期存活且不受沙盒限制的进程 ──
             if (!ok)
             {
