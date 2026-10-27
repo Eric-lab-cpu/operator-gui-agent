@@ -40,6 +40,7 @@ namespace OperatorTray
 
         static int Port = 6360;
         static string BaseDir = "";
+        static string AppDir = "";    // 真实安装目录（可能含中文），由 appdir.txt 指定
         static NotifyIcon tray;
         static StatusForm form;
         static System.Windows.Forms.Timer timer;
@@ -59,6 +60,13 @@ namespace OperatorTray
             if (!created) return;
 
             BaseDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\');
+            try
+            {
+                string ptr = Path.Combine(BaseDir, "appdir.txt");
+                AppDir = File.Exists(ptr) ? File.ReadAllText(ptr).Trim() : BaseDir;
+            }
+            catch { AppDir = BaseDir; }
+            if (string.IsNullOrEmpty(AppDir)) AppDir = BaseDir;
             LoadPort();
 
             // Win11 对没有 AUMID 的进程经常不显示托盘图标
@@ -93,7 +101,7 @@ namespace OperatorTray
         {
             try
             {
-                string cfg = Path.Combine(BaseDir, "config.json");
+                string cfg = Path.Combine(string.IsNullOrEmpty(AppDir) ? BaseDir : AppDir, "config.json");
                 if (!File.Exists(cfg)) return;
                 Match m = Regex.Match(File.ReadAllText(cfg), "\"port\"\\s*:\\s*(\\d+)");
                 if (m.Success) Port = int.Parse(m.Groups[1].Value);
@@ -159,7 +167,10 @@ namespace OperatorTray
                             {
                                 if (kw == null) { Log("条目不可写"); return; }
                                 kw.SetValue("IsPromoted", 1, RegistryValueKind.DWord);
-                                Log("已提升");
+                                // 设置后重新添加图标，让 Explorer 重新读取「是否显示」
+                                try { tray.Visible = false; System.Threading.Thread.Sleep(120); tray.Visible = true; }
+                                catch { }
+                                Log("已提升并重新添加图标");
                                 promoted = true;
                             }
                             return;
@@ -267,6 +278,22 @@ namespace OperatorTray
                 stateLine = "服务：运行中\nworker：" + (worker ? "在线" : "离线") + "\n任务：" + (running ? "执行中" : "空闲");
             }
 
+            // 停止信号：启动器先杀服务，再让托盘自己退（跨进程权限不一致时更可靠）
+            try
+            {
+                string flag = Path.Combine(AppDir, "ipc", "stop.flag");
+                if (File.Exists(flag))
+                {
+                    File.Delete(flag);
+                    Log("收到停止信号，退出托盘");
+                    tray.Visible = false;
+                    tray.Dispose();
+                    Application.Exit();
+                    return;
+                }
+            }
+            catch { }
+
             if (!promoted) PromoteIcon();   // 还没提升就每轮重试一次
             // ── 守护：托盘是唯一长期存活且不受沙盒限制的进程 ──
             if (!ok)
@@ -304,11 +331,11 @@ namespace OperatorTray
         {
             try
             {
-                var psi = new ProcessStartInfo(Path.Combine(BaseDir, "Operator.exe"), args)
+                var psi = new ProcessStartInfo(Path.Combine(AppDir, "Operator.exe"), args)
                 {
                     UseShellExecute = false,
                     CreateNoWindow = true,
-                    WorkingDirectory = BaseDir
+                    WorkingDirectory = AppDir
                 };
                 Process.Start(psi);
             }

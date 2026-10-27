@@ -1,21 +1,33 @@
 ﻿# 更新日志
 
-## 0.6.0 — 2026-10-27
+## 0.7.0 — 2026-10-27
 
-### 新增：定时任务
-- 侧栏「定时任务」区块：新建 / 编辑 / 删除 / 启用暂停，每 15 秒刷新状态
-- 服务端每 30 秒检查一次，到点自动触发（同一时间只跑一个，避免抢鼠标）
-- 接口：`GET/POST /api/schedules`、`POST /api/schedules/delete`、`POST /api/schedules/run`
-- 配置存 `schedules.json`（已 gitignore）
+### 修复：托盘图标（根因找到）
+**Explorer 不会为中文路径下的 exe 创建通知区条目。**
 
-### 托盘：进一步排查（结论）
-- 试过：图标句柄 Clone + DestroyIcon、AUMID、系统图标替换、注册表提升
-- 现象：进程存活、`NotifyIcon.Visible = true`、无异常，但 Explorer 折叠面板里始终没有本程序
-- 对照：同一会话用 PowerShell 建 NotifyIcon 能正常注册 → 机制可用，差异未定位
-- 结论：代码逻辑正确，问题在本机会话的 Shell 侧；保底方案是手动双击 `OperatorTray.exe` 或重启 Explorer
+对照实验：
+| 运行位置 | 是否注册 |
+|---|---|
+| `C:\OperatorTrayTest\`（纯 ASCII） | ✅ 条目立刻创建 |
+| `...\workbuddy\混合区\computer-use\`（含中文） | ❌ 始终没有条目 |
+
+修复：托盘程序安装到 `C:\Operator` 运行（`setup-runtime.ps1` 一次性预置），
+启动器优先使用已安装副本；写不进去时退回原地并记录日志。
+
+顺带修掉：
+- `--stop` 因 `System.Management` 加载失败导致整个方法崩溃 → WMI 拆成独立方法
+- 跨上下文杀不掉托盘 → 改用文件信号 `ipc/stop.flag`，托盘自己退出
+- 图标设置 `IsPromoted` 后重新添加图标，让 Explorer 重读
+
+### 状态
+图标已注册（`C:\Operator\OperatorTray.exe`，IsPromoted=1），
+在托盘折叠区可见；Windows 需要重启 Explorer 才会把它放到常驻区。
+
+## 0.6.0
+- 定时任务调度
 
 ## 0.5.1
-- 托盘日志、图标句柄修复、注册表提升改为按路径匹配
+- 托盘日志、图标句柄修复、注册表提升按路径匹配
 
 ## 0.5.0
 - 托盘 + 任务栏状态窗口 + 托盘守护 + 全生命周期验证
@@ -24,7 +36,7 @@
 - 快捷指令、浅色主题、导出轨迹、历史重跑、完成通知
 
 ## 0.3.0
-- 可视化 API 设置、应用级自检、计划任务托管
+- 可视化 API 设置、应用级自检
 
 ## 0.2.0
 - 首个可分发版本

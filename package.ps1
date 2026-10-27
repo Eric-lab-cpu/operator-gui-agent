@@ -26,7 +26,7 @@ $files = @(
     'Operator.exe', 'OperatorTray.exe', 'VERSION', 'config.json',
     'cu.ps1', 'cu-cli.ps1', 'gui.ps1', 'worker.ps1',
     'worker-via-task.ps1', 'gui-clean.ps1', 'start-console.ps1',
-    'benchmark.ps1', 'hidden-run.vbs', 'selftest-app.ps1', 'console.vbs', 'verify-lifecycle.ps1',
+    'benchmark.ps1', 'hidden-run.vbs', 'selftest-app.ps1', 'console.vbs', 'verify-lifecycle.ps1', 'setup-runtime.ps1',
     'README.md', 'QUICKSTART.md', 'LICENSE', 'CHANGELOG.md'
 )
 foreach ($f in $files) {

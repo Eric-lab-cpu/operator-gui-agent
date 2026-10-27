@@ -262,16 +262,40 @@ namespace OperatorLauncher
             }
             catch { return false; }
         }
+        // WMI 单独成方法：万一 System.Management 加载不了，也只崩这一块，
+        // 不会因为 JIT 失败把整个 StopServer 带走。
+        static void KillNodeServers()
+        {
+            try
+            {
+                var searcher = new System.Management.ManagementObjectSearcher(
+                    "SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name='node.exe'");
+                foreach (System.Management.ManagementObject mo in searcher.Get())
+                {
+                    string cmd = (mo["CommandLine"] as string) ?? "";
+                    if (cmd.IndexOf("server.mjs", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    try { Process.GetProcessById(Convert.ToInt32(mo["ProcessId"])).Kill(); } catch { }
+                }
+            }
+            catch (Exception e) { LLog("KillNodeServers 失败: " + e.Message); }
+        }
+
         static void StopServer()
         {
-            // 停服务是个「和守护进程赛跑」的过程：托盘可能把服务又拉起来。
-            // 做法：最多循环 6 轮（先收托盘 → 再收 node → 等一下），直到确认干净。
+            LLog("StopServer 开始");
+            try { File.WriteAllText(Path.Combine(BaseDir, "ipc", "stop.flag"), "1"); }
+            catch (Exception e) { LLog("写停止标记失败: " + e.Message); }
             for (int round = 0; round < 6; round++)
             {
-                // 1) 托住托盘，避免它再重启服务
-                try { foreach (var p in Process.GetProcessesByName("OperatorTray")) { try { p.Kill(); } catch { } } } catch { }
+                try
+                {
+                    foreach (var p in Process.GetProcessesByName("OperatorTray"))
+                    {
+                        try { p.Kill(); LLog("已结束托盘 pid=" + p.Id); } catch (Exception e) { LLog("托盘 kill 失败: " + e.Message); }
+                    }
+                }
+                catch (Exception e) { LLog("托盘遍历失败: " + e.Message); }
 
-                // 2) 按 pid 文件关主服务
                 try
                 {
                     string pidFile = Path.Combine(BaseDir, "web", "console.pid");
@@ -280,34 +304,25 @@ namespace OperatorLauncher
                         int pid;
                         if (int.TryParse(File.ReadAllText(pidFile).Trim(), out pid))
                         {
-                            try { Process p = Process.GetProcessById(pid); p.Kill(); p.WaitForExit(3000); } catch { }
+                            try { Process p = Process.GetProcessById(pid); p.Kill(); p.WaitForExit(3000); LLog("已结束服务 pid=" + pid); }
+                            catch (Exception e) { LLog("服务 kill: " + e.Message); }
                         }
                         try { File.Delete(pidFile); } catch { }
                     }
                 }
-                catch { }
+                catch (Exception e) { LLog("读 pid 失败: " + e.Message); }
 
-                // 3) 扫掉所有跑 server.mjs 的 node（可能是被托盘拉起的第二实例）
-                bool any = false;
-                try
-                {
-                    var searcher = new System.Management.ManagementObjectSearcher(
-                        "SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name='node.exe'");
-                    foreach (System.Management.ManagementObject mo in searcher.Get())
-                    {
-                        string cmd = (mo["CommandLine"] as string) ?? "";
-                        if (cmd.IndexOf("server.mjs", StringComparison.OrdinalIgnoreCase) < 0) continue;
-                        any = true;
-                        try { Process.GetProcessById(Convert.ToInt32(mo["ProcessId"])).Kill(); } catch { }
-                    }
-                }
-                catch { }
-
+                KillNodeServers();
                 System.Threading.Thread.Sleep(400);
 
+                // 给托盘一点时间自己退出
+                for (int i = 0; i < 10 && Process.GetProcessesByName("OperatorTray").Length > 0; i++)
+                    System.Threading.Thread.Sleep(200);
                 bool trayLeft = Process.GetProcessesByName("OperatorTray").Length > 0;
-                if (!any && !trayLeft) return;
+                bool nodeLeft = Process.GetProcessesByName("node").Length > 0;
+                if (!trayLeft && !nodeLeft) { LLog("StopServer 完成（第 " + (round + 1) + " 轮）"); return; }
             }
+            LLog("StopServer 达到最大轮次");
         }
         // ── worker ────────────────────────────────────────────
         static void EnsureWorker()
@@ -347,6 +362,12 @@ namespace OperatorLauncher
 
         // ── 托盘 ──────────────────────────────────────────────
         static bool SilentMode = false;
+
+        static void LLog(string m)
+        {
+            try { File.AppendAllText(Path.Combine(BaseDir, "launcher.log"), DateTime.Now.ToString("HH:mm:ss") + " " + m + "\r\n"); }
+            catch { }
+        }
         // 让托盘图标默认显示在通知区（而不是折叠菜单里）
         static void PromoteTray()
         {
@@ -356,30 +377,109 @@ namespace OperatorLauncher
                 using (var k = Registry.CurrentUser.CreateSubKey(@"Control Panel\NotifyIconSettings\" + id))
                 {
                     if (k == null) return;
-                    k.SetValue("ExecutablePath", Path.Combine(BaseDir, "OperatorTray.exe"), RegistryValueKind.String);
+                    k.SetValue("ExecutablePath", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Operator", "OperatorTray.exe"), RegistryValueKind.String);
                     k.SetValue("IsPromoted", 1, RegistryValueKind.DWord);
                     k.SetValue("InitialTooltip", "Operator", RegistryValueKind.String);
                 }
             }
             catch { }
         }
+        static string RuntimeDir()
+        {
+            // 托盘必须运行在纯 ASCII 路径下：
+            // Explorer 不会为中文路径中的 exe 创建通知区条目（本机实测确认）。
+            // C:\Operator 是首选安装位置；写不进去时退回工作区（那里图标不会显示）。
+            var cands = new System.Collections.Generic.List<string>();
+            cands.Add(@"C:\Operator");
+            string lad = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (!string.IsNullOrEmpty(lad)) cands.Add(Path.Combine(lad, "Operator"));
+            cands.Add(Path.Combine(BaseDir, "runtime"));
+
+            foreach (string c in cands)
+            {
+                try
+                {
+                    Directory.CreateDirectory(c);
+                    string probe = Path.Combine(c, ".wtest");
+                    File.WriteAllText(probe, "ok");
+                    File.Delete(probe);
+                    LLog("可用运行目录: " + c);
+                    return c;
+                }
+                catch (Exception e) { LLog("不可写: " + c + " -> " + e.Message); }
+            }
+            return null;
+        }
+
         static void EnsureTray()
         {
             try
             {
-                PromoteTray();
-                if (Process.GetProcessesByName("OperatorTray").Length > 0) return;
-                string tray = Path.Combine(BaseDir, "OperatorTray.exe");
-                if (!File.Exists(tray)) return;
-                var psi = new ProcessStartInfo(tray, SilentMode ? "--hidden" : "")
+                LLog("EnsureTray 开始 silent=" + SilentMode);
+
+                // 首选：已经装好的 ASCII 运行目录（setup-runtime.ps1 预置的）。
+                // 即使当前进程写不进去，只要文件在就能直接启动 —— 图标也才会显示。
+                string installed = @"C:\Operator\OperatorTray.exe";
+                if (File.Exists(installed) && Process.GetProcessesByName("OperatorTray").Length == 0)
+                {
+                    string cfgSrc0 = Path.Combine(BaseDir, "config.json");
+                    try
+                    {
+                        if (File.Exists(cfgSrc0)) File.Copy(cfgSrc0, @"C:\Operator\config.json", true);
+                        File.WriteAllText(@"C:\Operator\appdir.txt", BaseDir);
+                    }
+                    catch { }
+                    var psi0 = new ProcessStartInfo(installed, SilentMode ? "--hidden" : "")
+                    {
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        WorkingDirectory = @"C:\Operator"
+                    };
+                    var p0 = Process.Start(psi0);
+                    LLog("已启动托盘(已安装) pid=" + (p0 == null ? 0 : p0.Id) + " from " + installed);
+                    return;
+                }
+
+                string targetDir = RuntimeDir();
+
+                string src = Path.Combine(BaseDir, "OperatorTray.exe");
+                string dst = targetDir == null ? null : Path.Combine(targetDir, "OperatorTray.exe");
+
+                // 目标目录不可写时，只要那里已经有一份（安装时预置的）就直接用
+                if (targetDir != null && (dst == null || !File.Exists(dst) || File.GetLastWriteTimeUtc(src) > File.GetLastWriteTimeUtc(dst)))
+                {
+                    try
+                    {
+                        foreach (var p in Process.GetProcessesByName("OperatorTray")) { try { p.Kill(); } catch { } }
+                        System.Threading.Thread.Sleep(250);
+                        File.Copy(src, dst, true);
+                        string cfgSrc = Path.Combine(BaseDir, "config.json");
+                        if (File.Exists(cfgSrc)) File.Copy(cfgSrc, Path.Combine(targetDir, "config.json"), true);
+                        File.WriteAllText(Path.Combine(targetDir, "appdir.txt"), BaseDir);
+                        LLog("已同步托盘到 " + targetDir);
+                    }
+                    catch (Exception e) { LLog("同步失败（用已有副本）: " + e.Message); }
+                }
+
+                if (dst == null || !File.Exists(dst))
+                {
+                    // 最后的兜底：直接在原地跑（图标会进不了通知区，但菜单/守护仍可用）
+                    LLog("没有可用的 ASCII 目录，原地启动托盘");
+                    dst = src;
+                    targetDir = BaseDir;
+                }
+
+                if (Process.GetProcessesByName("OperatorTray").Length > 0) { LLog("托盘已在运行"); return; }
+                var psi = new ProcessStartInfo(dst, SilentMode ? "--hidden" : "")
                 {
                     UseShellExecute = false,
                     CreateNoWindow = true,
-                    WorkingDirectory = BaseDir
+                    WorkingDirectory = targetDir
                 };
-                Process.Start(psi);
+                var proc = Process.Start(psi);
+                LLog("已启动托盘 pid=" + (proc == null ? 0 : proc.Id) + " from " + dst);
             }
-            catch { }
+            catch (Exception e) { LLog("EnsureTray 异常: " + e.Message); }
         }
         // ── 状态 ──────────────────────────────────────────────
         static void ShowStatus()
