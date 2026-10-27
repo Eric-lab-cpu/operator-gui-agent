@@ -16,6 +16,7 @@ launcher.log
 agent/keys.json
 
 # 构建产物
+runtime/
 dist/
 *.zip
 bin/*.pdb
