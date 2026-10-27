@@ -722,3 +722,28 @@ API 配置读取             PASS   22 ms   10 个服务商预设
 | 安全 | ✅ 前台断言 / DPI 校验 / 关窗护栏 |
 | 自检 | ✅ 6/6 PASS |
 | 分发包 | ✅ `dist\Operator-0.2.0.zip` |
+
+## 21. v0.4.0 新增
+
+| 功能 | 说明 |
+|---|---|
+| 快捷指令 | 侧栏四个一键任务：关窗口 / 读系统信息 / 截图存档 / 最大化 |
+| 浅色主题 | 右上角 ☀ / 🌙 切换，记忆在 localStorage |
+| 导出轨迹 | 轨迹栏「导出」，或 `GET /api/export?id=<runId>`，输出 Markdown |
+| 历史操作 | 每条历史悬停出现「重跑」「导出」 |
+| 完成通知 | 任务结束弹系统通知，标题变成 ✔ |
+| 应用控制接口 | `POST /api/app/autostart`、`POST /api/app/stop` |
+
+发布一条命令：
+
+```powershell
+.\release.ps1              # 编译 + 打包 + 提交 + 打 tag
+.\release.ps1 -Push        # 顺带推送到远端
+```
+
+推送到 GitHub：
+
+```powershell
+gh auth login              # 一次性登录
+.\push-to-github.ps1 -Repo <你的用户名>/operator
+```
