@@ -412,6 +412,46 @@ const server = http.createServer(async (req, res) => {
       });
       return json(res, r);
     }
+    if (p === '/api/export' && req.method === 'GET') {
+      const id = url.searchParams.get('id');
+      const meta = readJsonFile(path.join(HIST, (id || '') + '.json'), null);
+      if (!meta) return json(res, { ok: false, error: '记录不存在' }, 404);
+      let text = '';
+      try { text = fs.readFileSync(path.join(HIST, id + '.log'), 'utf8'); } catch {}
+      const md = [
+        '# ' + meta.task,
+        '',
+        '- 时间：' + new Date(meta.startedAt).toLocaleString('zh-CN', { hour12: false }),
+        '- 模型：' + meta.provider + ' / ' + meta.model,
+        '- 状态：' + meta.status,
+        '- tokens：' + ((meta.tokens && meta.tokens.total) || 0),
+        '',
+        '```text',
+        text.replace(/__USAGE__ .*/g, '').replace(/__TOKENS__ .*/g, '').replace(/__AGENT_DONE__/g, '').trim(),
+        '```',
+        ''
+      ].join('\n');
+      res.writeHead(200, {
+        'Content-Type': 'text/markdown; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="operator-' + id + '.md"'
+      });
+      return res.end(md);
+    }
+
+    if (p === '/api/app/autostart' && req.method === 'POST') {
+      try {
+        spawn(path.join(ROOT, 'Operator.exe'), ['--install'], { stdio: 'ignore', detached: true }).unref();
+        return json(res, { ok: true, message: '已请求设置开机自启，请在弹窗中确认' });
+      } catch (e) { return json(res, { ok: false, error: String(e) }, 500); }
+    }
+
+    if (p === '/api/app/stop' && req.method === 'POST') {
+      setTimeout(() => {
+        try { spawn(path.join(ROOT, 'Operator.exe'), ['--stop'], { stdio: 'ignore', detached: true }).unref(); } catch {}
+        setTimeout(() => process.exit(0), 600);
+      }, 200);
+      return json(res, { ok: true, message: '服务正在停止' });
+    }
     res.writeHead(404); res.end('not found');
   } catch (e) {
     try { json(res, { ok: false, error: String((e && e.message) || e) }, 500); } catch {}

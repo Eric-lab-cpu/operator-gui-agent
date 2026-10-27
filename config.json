@@ -5,9 +5,9 @@
     "defaultProvider": "deepseek",
     "defaultModel": "deepseek-chat",
     "maxSteps": 10,
-    "baseUrl": "https://api.deepseek.com/v1",
-    "provider": "deepseek",
-    "model": "deepseek-chat"
+    "baseUrl": "http://127.0.0.1:11434",
+    "provider": "ollama",
+    "model": "gemma4:e4b"
   },
   "worker": {
     "taskName": "DSH-GUI-Worker"

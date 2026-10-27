@@ -156,6 +156,30 @@
   .msg.err{background:rgba(251,113,133,.1);color:#ffb3bd;border:1px solid rgba(251,113,133,.3)}
   .btn.sm{width:auto;height:36px;padding:0 16px;font-size:12.5px;border-radius:10px}
   .btn.ghost.sm{background:var(--glass);border:1px solid var(--line)}
+  /* 浅色主题 */
+  body.light{
+    --bg:#eef1f7; --ink:#111725; --dim:#5a6478; --line:rgba(18,26,43,.11);
+    --glass:rgba(255,255,255,.75); --glass2:#fff;
+  }
+  body.light .aurora{opacity:.22}
+  body.light aside,body.light section.r,body.light .cell{background:rgba(255,255,255,.78)!important}
+  body.light .pane,body.light .bar,body.light .thead{background:rgba(255,255,255,.6)!important}
+  body.light .k1 .tx{color:#0f766e} body.light .k2 .tx{color:#5b46c9}
+  body.light .k3 .tx{color:#1f5fbf} body.light .k4 .tx{color:#b4233a}
+  body.light .k5 .tx{color:#98600a} body.light .k0 .tx{color:#3d4a61}
+  body.light .ln .ts{color:#96a1b4}
+  body.light .shot{background:#e7ebf3}
+  body.light .modal{background:rgba(210,218,232,.6)}
+  body.light .sheet{background:linear-gradient(180deg,#fff,#f4f6fb)}
+  /* 快捷指令 */
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .chipx{font-size:11.5px;padding:5px 10px;border-radius:8px;border:1px solid var(--line);background:var(--glass);
+         color:var(--dim);cursor:pointer;transition:.15s;white-space:nowrap}
+  .chipx:hover{background:var(--glass2);color:var(--ink);border-color:rgba(94,234,212,.35)}
+  .hitem .acts{display:none;gap:6px;margin-top:6px}
+  .hitem:hover .acts{display:flex}
+  .mini{font-size:10.5px;padding:3px 8px;border-radius:6px;border:1px solid var(--line);background:var(--glass);color:var(--dim);cursor:pointer}
+  .mini:hover{color:var(--ink);background:var(--glass2)}
 </style>
 </head>
 <body>
@@ -178,6 +202,7 @@
       <canvas class="spark" id="spark" width="128" height="44"></canvas>
     </div>
 
+    <div class="gear" id="themeBtn" title="切换主题">☀</div>
     <div class="gear" id="gearBtn" title="API 设置">⚙</div>
     <div class="chip" id="workerChip"><span class="dot"></span><span id="workerText">连接中</span></div>
     <div class="chip" id="modelChip">ollama / gemma4:e4b</div>
@@ -188,6 +213,12 @@
       <div>
         <div class="lab">任务</div>
         <textarea id="task" placeholder="用一句话描述目标：&#10;· 把 DirectX 诊断工具窗口关掉&#10;· 打开计算器，算 37 × 24"></textarea>
+        <div class="chips" id="chips">
+          <div class="chipx" data-task="关闭当前窗口">关窗口</div>
+          <div class="chipx" data-task="读出这台电脑的计算机名和操作系统版本">读系统信息</div>
+          <div class="chipx" data-task="截图保存当前窗口到桌面">截图存档</div>
+          <div class="chipx" data-task="把当前窗口最大化">最大化</div>
+        </div>
       </div>
 
       <div>
@@ -239,6 +270,7 @@
       <div class="grow"></div>
       <span class="tag" id="elapsed">—</span>
       <span class="tag" id="stepsTag">0 步</span>
+      <span class="tag" id="exportBtn" style="cursor:pointer">导出</span>
     </div>
     <div class="trace" id="trace">
       <div class="empty"><div class="big">还没有任务</div><div>写下目标，点「开始执行」</div></div>
@@ -305,7 +337,7 @@
 <script>
 const $ = s => document.querySelector(s);
 const traceEl = $('#trace');
-let timer = null, startedAt = 0, lastLineCount = 0, running = false;
+let timer = null, startedAt = 0, lastLineCount = 0, running = false, lastRunId = null;
 let sparkData = [];
 
 /* ── 渲染轨迹 ── */
@@ -333,6 +365,7 @@ function addLine(text) {
 }
 function renderAll(text) {
   traceEl.innerHTML = '';
+  notified = false;
   const lines = text.split(/\r?\n/).filter(l => l.trim() && !l.startsWith('__USAGE__') && !l.startsWith('__TOKENS__') && l !== '__AGENT_DONE__');
   lines.forEach(addLine);
   lastLineCount = lines.length;
@@ -386,6 +419,16 @@ function renderHistory(items) {
       <div class="m"><span class="st ${st}"></span><span>${t.toLocaleString('zh-CN',{hour12:false})}</span>
       <span>·</span><span>${it.model || it.provider}</span><span>·</span><span>${fmt((it.tokens && it.tokens.total) || 0)} tok</span></div>`;
     d.querySelector('.t').textContent = it.task;
+    const acts = document.createElement('div');
+    acts.className = 'acts';
+    const rerun = document.createElement('span');
+    rerun.className = 'mini'; rerun.textContent = '重跑';
+    rerun.onclick = (e) => { e.stopPropagation(); $('#task').value = it.task; $('#provider').value = it.provider || 'deepseek'; $('#model').value = it.model || ''; $('#modelChip').textContent = ($('#provider').value) + ' / ' + $('#model').value; run(); };
+    const exp = document.createElement('span');
+    exp.className = 'mini'; exp.textContent = '导出';
+    exp.onclick = (e) => { e.stopPropagation(); window.location = '/api/export?id=' + it.id; };
+    acts.appendChild(rerun); acts.appendChild(exp);
+    d.appendChild(acts);
     d.onclick = async () => {
       const r = await api('/api/history/' + it.id);
       if (r.ok) { renderAll(r.text); $('#state').textContent = '历史记录'; $('#stepsTag').textContent = '只读'; }
@@ -431,6 +474,7 @@ async function pollState() {
     }
   }
 
+  if (s.runId) lastRunId = s.runId;
   running = s.running;
   if (s.running) {
     $('#state').textContent = '运行中';
@@ -439,6 +483,7 @@ async function pollState() {
     $('#state').textContent = '结束';
     $('#run').disabled = false;
     clearInterval(timer);
+    notifyDone('任务执行完成');
   }
 }
 
@@ -476,6 +521,7 @@ async function run() {
   if (!body.task) { $('#task').focus(); return; }
 
   traceEl.innerHTML = '';
+  notified = false;
   lastLineCount = 0; sparkData = []; drawSpark();
   setTokens({ total: 0, prompt: 0, completion: 0 });
   $('#run').disabled = true;
@@ -626,6 +672,43 @@ $('#s-save').onclick = async () => {
 };
 
 loadSettings();
+/* ── 主题 ── */
+function applyTheme(t) {
+  document.body.classList.toggle('light', t === 'light');
+  var b = document.getElementById('themeBtn');
+  if (b) b.textContent = (t === 'light' ? '🌙' : '☀');
+  try { localStorage.setItem('op-theme', t); } catch (e) {}
+}
+var themeBtn = document.getElementById('themeBtn');
+if (themeBtn) themeBtn.onclick = function () { applyTheme(document.body.classList.contains('light') ? 'dark' : 'light'); };
+try { applyTheme(localStorage.getItem('op-theme') || 'dark'); } catch (e) {}
+
+/* ── 快捷指令 ── */
+Array.prototype.forEach.call(document.querySelectorAll('.chipx'), function (el) {
+  el.onclick = function () { $('#task').value = el.getAttribute('data-task') || el.textContent; $('#task').focus(); };
+});
+
+/* ── 导出 ── */
+var exportBtn = document.getElementById('exportBtn');
+if (exportBtn) exportBtn.onclick = function () {
+  if (!lastRunId) { addLine('还没有可导出的运行记录'); return; }
+  window.location = '/api/export?id=' + lastRunId;
+};
+
+/* ── 完成通知 ── */
+let notified = false;
+function notifyDone(text) {
+  if (notified) return;
+  notified = true;
+  try {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('Operator · 任务结束', { body: text || '执行完成' });
+    }
+  } catch (e) {}
+  var old = document.title;
+  document.title = '✔ ' + (text || '完成');
+  setTimeout(function () { document.title = old; }, 4000);
+}
 </script>
 </body>
 </html>
