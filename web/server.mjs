@@ -56,6 +56,77 @@ function sweepTemp() {
 sweepTemp();
 setInterval(sweepTemp, 5 * 60 * 1000);
 
+// ── 配置（API 设置）────────────────────────────────────────
+const CONFIG_FILE = path.join(ROOT, 'config.json');
+const KEYS_FILE = path.join(ROOT, 'agent', 'keys.json');
+const RUN_DIR = path.join(ROOT, 'agent', 'run');
+const PY = (() => {
+  const p = 'C:\\Users\\18790\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe';
+  return fs.existsSync(p) ? p : 'python';
+})();
+
+function readJsonFile(p, dflt) {
+  try { return JSON.parse(fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, '')); } catch { return dflt; }
+}
+function writeJsonFile(p, obj) {
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, JSON.stringify(obj, null, 2), 'utf8');
+}
+function maskKey(k) {
+  if (!k) return '';
+  if (k.length <= 8) return '****';
+  return k.slice(0, 3) + '****' + k.slice(-4);
+}
+
+const PRESETS = {
+  deepseek:    { baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat', needKey: true, label: 'DeepSeek' },
+  openai:      { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o', needKey: true, label: 'OpenAI' },
+  moonshot:    { baseUrl: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k', needKey: true, label: 'Moonshot / Kimi' },
+  dashscope:   { baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-vl-max', needKey: true, label: '阿里通义 (DashScope)' },
+  zhipu:       { baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4v-plus', needKey: true, label: '智谱 GLM' },
+  siliconflow: { baseUrl: 'https://api.siliconflow.cn/v1', model: 'Qwen/Qwen2.5-VL-7B-Instruct', needKey: true, label: '硅基流动' },
+  groq:        { baseUrl: 'https://api.groq.com/openai/v1', model: 'llama-3.2-11b-vision-preview', needKey: true, label: 'Groq' },
+  anthropic:   { baseUrl: 'https://api.anthropic.com', model: 'claude-sonnet-4-20250514', needKey: true, label: 'Anthropic Claude' },
+  ollama:      { baseUrl: 'http://127.0.0.1:11434', model: 'gemma4:e4b', needKey: false, label: '本地 Ollama' },
+  custom:      { baseUrl: '', model: '', needKey: false, label: '自定义（OpenAI 兼容）' }
+};
+
+// 用 llm_call.py 发一条极小请求，验证 key / 地址 / 模型是否可用
+function testProvider(opts) {
+  return new Promise((resolve) => {
+    try {
+      fs.mkdirSync(RUN_DIR, { recursive: true });
+      const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const reqFile = path.join(RUN_DIR, `test-${id}.req.json`);
+      const resFile = path.join(RUN_DIR, `test-${id}.res.json`);
+      const style = opts.style || (opts.provider === 'anthropic' ? 'anthropic' : (opts.provider === 'ollama' ? 'ollama' : 'openai'));
+      const req = {
+        style,
+        baseUrl: opts.baseUrl || (PRESETS[opts.provider] || {}).baseUrl || '',
+        model: opts.model || (PRESETS[opts.provider] || {}).model || '',
+        apiKey: opts.apiKey || '',
+        messages: [{ role: 'user', content: '只输出 JSON：{"ok":true}' }],
+        image: '',
+        timeout: 40
+      };
+      fs.writeFileSync(reqFile, JSON.stringify(req), 'utf8');
+      const started = Date.now();
+      const child = spawn(PY, [path.join(ROOT, 'agent', 'llm_call.py'), reqFile, resFile],
+        { stdio: 'ignore', windowsHide: true });
+      child.on('exit', () => {
+        let out = { ok: false, error: '进程没有输出' };
+        try { out = JSON.parse(fs.readFileSync(resFile, 'utf8').replace(/^\uFEFF/, '')); } catch {}
+        try { fs.unlinkSync(reqFile); } catch {}
+        try { fs.unlinkSync(resFile); } catch {}
+        out.latencyMs = Date.now() - started;
+        resolve(out);
+      });
+      setTimeout(() => { try { child.kill(); } catch {} }, 45000);
+    } catch (e) {
+      resolve({ ok: false, error: String(e && e.message || e) });
+    }
+  });
+}
 // ── 与 worker 的文件 IPC ────────────────────────────────────
 async function ipc(req, timeoutMs = 25000) {
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -134,8 +205,8 @@ function startRun(opts) {
   const meta = {
     id,
     task: String(opts.task || ''),
-    provider: String(opts.provider || 'ollama'),
-    model: String(opts.model || ''),
+    provider: String(opts.provider || (readJsonFile(CONFIG_FILE, {}).agent || {}).provider || 'deepseek'),
+    model: String(opts.model || (readJsonFile(CONFIG_FILE, {}).agent || {}).model || ''),
     maxSteps: Number(opts.maxSteps || 8),
     plan: !!opts.plan,
     screenshot: !!opts.screenshot,
@@ -269,6 +340,78 @@ const server = http.createServer(async (req, res) => {
       return json(res, { ok: true, meta: JSON.parse(fs.readFileSync(metaFile, 'utf8')), text });
     }
 
+    if (p === '/api/health') {
+      return json(res, {
+        ok: true,
+        version: (() => { try { return fs.readFileSync(path.join(ROOT, 'VERSION'), 'utf8').trim(); } catch { return '?'; } })(),
+        port: PORT,
+        worker: workerOnline(),
+        uptimeSec: Math.floor(process.uptime()),
+        running: !!(run && !run.done)
+      });
+    }
+
+    if (p === '/api/settings' && req.method === 'GET') {
+      const cfg = readJsonFile(CONFIG_FILE, {});
+      const keys = readJsonFile(KEYS_FILE, {});
+      const keyInfo = {};
+      for (const k of Object.keys(keys)) {
+        if (typeof keys[k] === 'string' && keys[k]) keyInfo[k] = maskKey(keys[k]);
+      }
+      return json(res, {
+        presets: PRESETS,
+        agent: (() => {
+          const a = cfg.agent || {};
+          return {
+            provider: a.provider || a.defaultProvider || 'deepseek',
+            model: a.model || a.defaultModel || 'deepseek-chat',
+            baseUrl: a.baseUrl || '',
+            maxSteps: a.maxSteps || 8
+          };
+        })(),
+        keys: keyInfo,
+        env: {
+          DEEPSEEK_API_KEY: !!process.env.DEEPSEEK_API_KEY,
+          OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
+          ANTHROPIC_API_KEY: !!process.env.ANTHROPIC_API_KEY
+        }
+      });
+    }
+
+    if (p === '/api/settings' && req.method === 'POST') {
+      const body = await readBody(req);
+      const cfg = readJsonFile(CONFIG_FILE, {});
+      if (body.agent) {
+        cfg.agent = Object.assign({}, cfg.agent || {}, body.agent);
+      }
+      writeJsonFile(CONFIG_FILE, cfg);
+
+      if (body.keys && typeof body.keys === 'object') {
+        const keys = readJsonFile(KEYS_FILE, {});
+        for (const [k, v] of Object.entries(body.keys)) {
+          if (v === null) { delete keys[k]; continue; }
+          if (typeof v === 'string' && v.trim() && !/^\*+$/.test(v)) keys[k] = v.trim();
+        }
+        writeJsonFile(KEYS_FILE, keys);
+      }
+      return json(res, { ok: true, agent: cfg.agent });
+    }
+
+    if (p === '/api/settings/test' && req.method === 'POST') {
+      const body = await readBody(req);
+      const keys = readJsonFile(KEYS_FILE, {});
+      const provider = body.provider || 'deepseek';
+      const preset = PRESETS[provider] || {};
+      const apiKey = (body.apiKey && String(body.apiKey).trim()) || keys[provider] || '';
+      const r = await testProvider({
+        provider,
+        style: body.style,
+        baseUrl: body.baseUrl || preset.baseUrl || '',
+        model: body.model || preset.model || '',
+        apiKey
+      });
+      return json(res, r);
+    }
     res.writeHead(404); res.end('not found');
   } catch (e) {
     try { json(res, { ok: false, error: String((e && e.message) || e) }, 500); } catch {}

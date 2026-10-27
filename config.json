@@ -4,7 +4,10 @@
   "agent": {
     "defaultProvider": "deepseek",
     "defaultModel": "deepseek-chat",
-    "maxSteps": 8
+    "maxSteps": 10,
+    "baseUrl": "https://api.deepseek.com/v1",
+    "provider": "deepseek",
+    "model": "deepseek-chat"
   },
   "worker": {
     "taskName": "DSH-GUI-Worker"

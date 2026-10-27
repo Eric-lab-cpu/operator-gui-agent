@@ -131,6 +131,31 @@
   ::-webkit-scrollbar{width:9px;height:9px}
   ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:9px}
   ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.16)}
+  /* 设置弹层 */
+  .gear{width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:var(--glass);color:var(--dim);
+        display:grid;place-items:center;cursor:pointer;transition:.16s}
+  .gear:hover{background:var(--glass2);color:var(--ink)}
+  .modal{position:fixed;inset:0;background:rgba(3,5,10,.72);backdrop-filter:blur(6px);z-index:50;
+         display:none;align-items:center;justify-content:center}
+  .modal.on{display:flex}
+  .sheet{width:min(680px,92vw);max-height:88vh;overflow:auto;border-radius:18px;border:1px solid var(--line);
+         background:linear-gradient(180deg,rgba(20,25,38,.98),rgba(10,13,20,.98));box-shadow:0 40px 120px -30px rgba(0,0,0,.9)}
+  .sheet h3{margin:0;padding:18px 22px;border-bottom:1px solid var(--line);font-size:15px;display:flex;align-items:center;gap:10px}
+  .sheet .body{padding:18px 22px;display:flex;flex-direction:column;gap:14px}
+  .sheet .foot{padding:14px 22px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end;align-items:center}
+  .fld{display:flex;flex-direction:column;gap:6px}
+  .fld label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+  .fld input,.fld select{width:100%;background:var(--glass);border:1px solid var(--line);color:var(--ink);
+        border-radius:10px;padding:10px 12px;font:inherit;font-size:13px;outline:none}
+  .fld input:focus,.fld select:focus{border-color:rgba(94,234,212,.4)}
+  .fld .tip{font-size:11px;color:var(--dim)}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .msg{font-size:12.5px;padding:9px 12px;border-radius:10px;display:none}
+  .msg.on{display:block}
+  .msg.ok{background:rgba(94,234,212,.1);color:#9df5e4;border:1px solid rgba(94,234,212,.3)}
+  .msg.err{background:rgba(251,113,133,.1);color:#ffb3bd;border:1px solid rgba(251,113,133,.3)}
+  .btn.sm{width:auto;height:36px;padding:0 16px;font-size:12.5px;border-radius:10px}
+  .btn.ghost.sm{background:var(--glass);border:1px solid var(--line)}
 </style>
 </head>
 <body>
@@ -153,6 +178,7 @@
       <canvas class="spark" id="spark" width="128" height="44"></canvas>
     </div>
 
+    <div class="gear" id="gearBtn" title="API 设置">⚙</div>
     <div class="chip" id="workerChip"><span class="dot"></span><span id="workerText">连接中</span></div>
     <div class="chip" id="modelChip">ollama / gemma4:e4b</div>
   </div>
@@ -234,6 +260,48 @@
   </section>
 </div>
 
+  <div class="modal" id="settings">
+    <div class="sheet">
+      <h3>⚙ API 设置</h3>
+      <div class="body">
+        <div class="row2">
+          <div class="fld">
+            <label>服务商</label>
+            <select id="s-provider"></select>
+          </div>
+          <div class="fld">
+            <label>模型</label>
+            <input id="s-model" placeholder="deepseek-chat">
+          </div>
+        </div>
+        <div class="fld">
+          <label>Base URL（OpenAI 兼容地址）</label>
+          <input id="s-baseurl" placeholder="https://api.deepseek.com/v1">
+          <div class="tip">可填任何 OpenAI 兼容网关，例如自建 vLLM / OneAPI / 内网代理。</div>
+        </div>
+        <div class="fld">
+          <label>API Key</label>
+          <input id="s-key" type="password" placeholder="sk-..." autocomplete="off">
+          <div class="tip" id="s-keytip">已保存的 Key 不会回显，留空表示不修改。</div>
+        </div>
+        <div class="row2">
+          <div class="fld">
+            <label>默认最大步数</label>
+            <input id="s-steps" type="number" min="1" max="30">
+          </div>
+          <div class="fld">
+            <label>&nbsp;</label>
+            <button class="btn ghost sm" id="s-test" style="width:100%">测试连接</button>
+          </div>
+        </div>
+        <div class="msg" id="s-msg"></div>
+      </div>
+      <div class="foot">
+        <button class="btn ghost sm" id="s-cancel">取消</button>
+        <button class="btn sm" id="s-save">保存</button>
+      </div>
+    </div>
+  </div>
 <script>
 const $ = s => document.querySelector(s);
 const traceEl = $('#trace');
@@ -447,6 +515,117 @@ setInterval(() => {
     $('#shot').src = '/api/shot?t=' + Date.now();
   }
 }, 3500);
+/* ── API 设置 ── */
+let S = { presets: {}, agent: {}, keys: {} };
+
+function applyAgentToForm(a) {
+  if (!a) return;
+  if (a.provider && $('#provider')) $('#provider').value = a.provider;
+  if (a.model && $('#model')) $('#model').value = a.model;
+  if (a.maxSteps && $('#steps')) $('#steps').value = a.maxSteps;
+  if ($('#modelChip')) $('#modelChip').textContent = (a.provider || '') + ' / ' + (a.model || '');
+}
+
+async function loadSettings() {
+  try {
+    const r = await api('/api/settings');
+    S = r;
+    applyAgentToForm(r.agent);
+  } catch { }
+}
+
+async function openSettings() {
+  await loadSettings();
+  const sel = $('#s-provider');
+  sel.innerHTML = '';
+  Object.entries(S.presets || {}).forEach(([k, v]) => {
+    const o = document.createElement('option');
+    o.value = k; o.textContent = v.label || k;
+    sel.appendChild(o);
+  });
+  const a = S.agent || {};
+  sel.value = a.provider || 'deepseek';
+  const p = (S.presets || {})[sel.value] || {};
+  $('#s-model').value = a.model || p.model || '';
+  $('#s-baseurl').value = a.baseUrl || p.baseUrl || '';
+  $('#s-steps').value = a.maxSteps || 8;
+  $('#s-key').value = '';
+  const has = (S.keys || {})[sel.value];
+  $('#s-keytip').textContent = has ? ('已保存：' + has + '（留空表示不修改）') : '尚未设置 Key（本地 Ollama 可留空）';
+  $('#s-msg').className = 'msg';
+  $('#settings').classList.add('on');
+}
+
+function closeSettings() { $('#settings').classList.remove('on'); }
+
+function settingMsg(kind, text) {
+  const m = $('#s-msg');
+  m.className = 'msg on ' + kind;
+  m.textContent = text;
+}
+
+$('#gearBtn').onclick = openSettings;
+$('#s-cancel').onclick = closeSettings;
+$('#settings').onclick = (e) => { if (e.target.id === 'settings') closeSettings(); };
+
+$('#s-provider').onchange = () => {
+  const p = (S.presets || {})[$('#s-provider').value] || {};
+  $('#s-model').value = p.model || '';
+  $('#s-baseurl').value = p.baseUrl || '';
+  const has = (S.keys || {})[$('#s-provider').value];
+  $('#s-keytip').textContent = has ? ('已保存：' + has + '（留空表示不修改）') : '尚未设置 Key（本地 Ollama 可留空）';
+  $('#s-msg').className = 'msg';
+};
+
+$('#s-test').onclick = async () => {
+  const btn = $('#s-test');
+  btn.disabled = true;
+  settingMsg('ok', '测试中…');
+  $('#s-msg').className = 'msg on ok';
+  const body = {
+    provider: $('#s-provider').value,
+    model: $('#s-model').value.trim(),
+    baseUrl: $('#s-baseurl').value.trim(),
+    apiKey: $('#s-key').value.trim()
+  };
+  const r = await api('/api/settings/test', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+  });
+  btn.disabled = false;
+  if (r.ok) {
+    settingMsg('ok', '连接成功 · ' + body.model + ' · ' + r.latencyMs + 'ms' +
+      (r.usage && r.usage.total ? (' · ' + r.usage.total + ' tokens') : ''));
+  } else {
+    settingMsg('err', '失败：' + (r.error || '未知错误'));
+  }
+};
+
+$('#s-save').onclick = async () => {
+  const provider = $('#s-provider').value;
+  const agent = {
+    provider,
+    model: $('#s-model').value.trim(),
+    baseUrl: $('#s-baseurl').value.trim(),
+    maxSteps: Number($('#s-steps').value) || 8
+  };
+  const keys = {};
+  const k = $('#s-key').value.trim();
+  if (k) keys[provider] = k;
+
+  const r = await api('/api/settings', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agent, keys })
+  });
+  if (r.ok) {
+    applyAgentToForm(agent);
+    settingMsg('ok', '已保存');
+    setTimeout(closeSettings, 600);
+  } else {
+    settingMsg('err', '保存失败');
+  }
+};
+
+loadSettings();
 </script>
 </body>
 </html>

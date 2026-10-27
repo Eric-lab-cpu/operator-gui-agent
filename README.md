@@ -664,3 +664,61 @@ dist\Operator-0.2.0.zip     分发用（约 0.1 MB）
 | agent 一跑就报 Add-Type 拒绝 | 运行在受限上下文里，`%TEMP%` 不可写 | agent 的临时文件改到工作区 `agent\run\` |
 | 每次调用慢 300~800ms | 每次都现编译 C# 帮助类 | 预编译 `bin\CUWin32.dll`，加载失败再回退编译 |
 | worker 莫名退出 | 外部看门狗不可靠 | 改用任务计划自带的「失败后重启」 |
+
+## 18. API 设置（对标主流 Agent 的填写方式）
+
+控制台右上角 **⚙** 打开设置，字段与 WorkBuddy / ChatGPT 客户端一致：
+
+| 字段 | 说明 |
+|---|---|
+| 服务商 | 10 个预设：DeepSeek / OpenAI / Moonshot / 通义 / 智谱 / 硅基流动 / Groq / Anthropic / Ollama / 自定义 |
+| 模型 | 选预设后自动填默认模型，可改 |
+| Base URL | OpenAI 兼容地址；填内网网关也能用（vLLM / OneAPI / 公司代理） |
+| API Key | 密码框；已保存的只显示 `sk-****acdf`，留空表示不修改 |
+| 默认最大步数 | 每次运行的上限 |
+| 测试连接 | 发一条极小请求，返回耗时和 token 消耗 |
+
+保存后写入 `config.json` 的 `agent` 段和 `agent\keys.json`（后者已 gitignore）。
+
+接口：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/health` | 版本 / 端口 / worker / uptime |
+| GET | `/api/settings` | 预设、当前配置、已保存 key（脱敏） |
+| POST | `/api/settings` | 保存 provider / model / baseUrl / maxSteps / key |
+| POST | `/api/settings/test` | 用给定或已存的 key 试连，返回 `{ok, latencyMs, usage, error}` |
+
+实测：DeepSeek 测试连接 **1492ms / 42 tokens**。
+
+## 19. 应用级自检
+
+```powershell
+.\selftest-app.ps1          # 服务需已在跑
+.\selftest-app.ps1 -Start   # 先尝试启动
+```
+
+六项检查：服务健康 → worker 在线 → 配置读取 → 模型连通 → 窗口枚举 → 真实任务。
+当前结果：**6/6 PASS**。
+
+```
+服务健康检查             PASS   97 ms   v0.2.0 · 端口 6360
+worker 在线             PASS   12 ms   沙盒外执行器可用
+API 配置读取             PASS   22 ms   10 个服务商预设
+模型连通性               PASS 1525 ms   deepseek · 42 tokens
+窗口枚举                PASS  349 ms   8 个窗口
+真实任务（开关 dxdiag）   PASS 12478 ms  目标窗口已关闭 · 755 tokens
+```
+
+## 20. 交付状态（v0.2.0）
+
+| 项目 | 状态 |
+|---|---|
+| 双击启动（`Operator.exe`） | ✅ 起服务 + worker + 浏览器 |
+| 服务常驻 | ✅ 计划任务 `DSH-GUI-Console` 托管，可 `--install` 开机自启 |
+| 控制台 | ✅ 实时轨迹 / token 用量 / 历史 / 截图 / 窗口列表 |
+| API 设置 | ✅ 10 预设 + 自定义网关 + 测试连接 |
+| agent 执行 | ✅ 走沙盒外 worker，支持 9 家云端 + 本地 Ollama |
+| 安全 | ✅ 前台断言 / DPI 校验 / 关窗护栏 |
+| 自检 | ✅ 6/6 PASS |
+| 分发包 | ✅ `dist\Operator-0.2.0.zip` |
