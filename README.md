@@ -1,4 +1,13 @@
-# 让 Agent 操作 Windows 界面 —— 本机已跑通的最小方案
+﻿# Operator · GUI Agent
+
+[![CI](https://github.com/Eric-lab-cpu/operator-gui-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Eric-lab-cpu/operator-gui-agent/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Eric-lab-cpu/operator-gui-agent)](https://github.com/Eric-lab-cpu/operator-gui-agent/releases/latest)
+[![License](https://img.shields.io/github/license/Eric-lab-cpu/operator-gui-agent)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-5eead4)]()
+
+> 用一句话驱动鼠标键盘。Windows 上的 GUI Agent：模型看窗口、点控件、填表单、跑任务。
+
+---
 
 > 目标：像「小艺帮帮忙」那样，Agent 看着屏幕、动鼠标键盘、把事做完。
 > 现状：`cu.ps1` 已经在你这台机器上跑通了 **截图 → 读控件树 → 按名字点按钮 → 输入中文 → 再截图验证** 的完整闭环，零安装。

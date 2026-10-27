@@ -13,7 +13,7 @@ jobs:
     name: 检查（语法 / 服务 / 接口）
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: 环境信息
         shell: pwsh
@@ -32,14 +32,14 @@ jobs:
     needs: check
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: 打包
         shell: pwsh
         run: ./package.ps1
 
       - name: 上传产物
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Operator-dist
           path: dist/*.zip
@@ -55,7 +55,7 @@ jobs:
     if: vars.ENABLE_GUI_CI == 'true'
     runs-on: [self-hosted, windows, gui]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: 应用自检（需要真实桌面与 worker）
         shell: pwsh
