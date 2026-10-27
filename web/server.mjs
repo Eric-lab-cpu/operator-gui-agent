@@ -228,15 +228,36 @@ function startRun(opts) {
   proc.on('exit', () => {
     try { fs.closeSync(fd); } catch {}
     if (!run) return;
-    run.done = true;
+    const finished = run;
+    finished.done = true;
     const text = readRunLog();
     const t = parseTokens(text);
     const m = { ...meta, endedAt: Date.now(), tokens: { prompt: t.prompt, completion: t.completion, total: t.total } };
     m.status = text.includes('完成:') ? 'done' : 'stopped';
+    if (finished.chain) {
+      m.chainName = finished.chain.name || '';
+      m.chainStep = (finished.chain.index || 0) + 1;
+      m.chainTotal = finished.chain.steps.length;
+    }
     saveMeta(m);
+
+    // 任务链：还有下一步就接着跑
+    const ch = finished.chain;
+    if (ch && ch.index + 1 < ch.steps.length) {
+      const next = ch.index + 1;
+      setTimeout(() => {
+        startRun({
+          task: ch.steps[next],
+          provider: ch.provider,
+          model: ch.model,
+          maxSteps: ch.maxSteps,
+          chain: { ...ch, index: next }
+        });
+      }, 1200);
+    }
   });
 
-  run = { id, proc, logPath, done: false, startedAt: Date.now(), meta };
+  run = { id, proc, logPath, done: false, startedAt: Date.now(), meta, chain: opts.chain || null, attempt: opts.attempt || 0 };
   return { ok: true, id };
 }
 
@@ -262,7 +283,14 @@ function tickSchedules() {
     t.lastRun = now;
     t.lastStatus = 'running';
     saveSched(s);
-    const r = startRun({ task: t.task, provider: t.provider, model: t.model, maxSteps: t.maxSteps });
+    const steps = Array.isArray(t.steps) && t.steps.length ? t.steps : [t.task];
+    const r = startRun({
+      task: steps[0],
+      provider: t.provider,
+      model: t.model,
+      maxSteps: t.maxSteps,
+      chain: steps.length > 1 ? { name: t.name, steps, index: 0, provider: t.provider, model: t.model, maxSteps: t.maxSteps } : null
+    });
     t.lastStatus = r.ok ? 'started' : 'busy';
     saveSched(s);
     break;
@@ -493,6 +521,10 @@ const server = http.createServer(async (req, res) => {
       if (!t) { t = { id, createdAt: Date.now(), lastRun: 0 }; s.tasks.push(t); }
       if (b.name !== undefined) t.name = String(b.name);
       if (b.task !== undefined) t.task = String(b.task);
+      if (Array.isArray(b.steps)) {
+        t.steps = b.steps.map(x => String(x)).filter(x => x.trim());
+        t.task = t.steps[0] || t.task;
+      }
       if (b.everyMin !== undefined) t.everyMin = Math.max(1, Number(b.everyMin) || 60);
       if (b.enabled !== undefined) t.enabled = !!b.enabled;
       if (b.provider !== undefined) t.provider = String(b.provider);
@@ -516,7 +548,14 @@ const server = http.createServer(async (req, res) => {
       const s = loadSched();
       const t = s.tasks.find(x => x.id === b.id);
       if (!t) return json(res, { ok: false, error: '任务不存在' }, 404);
-      const r = startRun({ task: t.task, provider: t.provider, model: t.model, maxSteps: t.maxSteps });
+      const steps = Array.isArray(t.steps) && t.steps.length ? t.steps : [t.task];
+    const r = startRun({
+      task: steps[0],
+      provider: t.provider,
+      model: t.model,
+      maxSteps: t.maxSteps,
+      chain: steps.length > 1 ? { name: t.name, steps, index: 0, provider: t.provider, model: t.model, maxSteps: t.maxSteps } : null
+    });
       if (r.ok) { t.lastRun = Date.now(); t.lastStatus = 'manual'; saveSched(s); }
       return json(res, r);
     }

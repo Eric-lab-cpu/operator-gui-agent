@@ -309,7 +309,7 @@
         </div>
         <div class="fld">
           <label>任务描述（交给模型执行的指令）</label>
-          <input id="t-task" placeholder="关闭所有 DirectX 诊断工具窗口">
+          <textarea id="t-task" rows="3" placeholder="每行一个步骤，按顺序执行&#10;例如：&#10;关闭所有 DirectX 诊断工具窗口&#10;打开系统属性窗口" style="width:100%;background:var(--glass);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px 12px;font:inherit;font-size:13px;outline:none;resize:vertical"></textarea>
         </div>
         <div class="row2">
           <div class="fld">
@@ -779,7 +779,8 @@ function renderScheds() {
     const sub = document.createElement('div');
     sub.className = 's';
     const last = t.lastRun ? new Date(t.lastRun).toLocaleTimeString('zh-CN', { hour12: false }) : '未运行';
-    sub.textContent = '每 ' + (t.everyMin || 60) + ' 分钟 · ' + (t.lastStatus || '待命') + ' · ' + last;
+    const steps = (t.steps && t.steps.length) ? t.steps.length : 1;
+    sub.textContent = '每 ' + (t.everyMin || 60) + ' 分钟 · ' + steps + ' 步 · ' + (t.lastStatus || '待命') + ' · ' + last;
     d.appendChild(title); d.appendChild(sub);
     d.onclick = () => openSched(t);
     box.appendChild(d);
