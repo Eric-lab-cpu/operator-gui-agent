@@ -1,0 +1,10 @@
+﻿{
+  "providers": {
+    "ollama": { "baseUrl": "http://127.0.0.1:11434" },
+    "ollama-openai": {
+      "baseUrl": "http://127.0.0.1:11434/v1",
+      "style": "openai",
+      "model": "gemma4:e4b"
+    }
+  }
+}

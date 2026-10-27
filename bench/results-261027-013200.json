@@ -1,0 +1,22 @@
+{
+    "total":  1,
+    "avgSeconds":  25.3,
+    "startedAt":  "2026-10-27T01:32:00",
+    "pass":  0,
+    "avgSteps":  6,
+    "model":  "deepseek-chat",
+    "rows":  [
+                 {
+                     "case":  "browser-calc",
+                     "ok":  false,
+                     "steps":  6,
+                     "seconds":  25.3,
+                     "tokens":  10354,
+                     "done":  false,
+                     "expect":  "页面出现「合计：75 元」",
+                     "log":  "C:\\Users\\18790\\Desktop\\workbuddy\\混合区\\computer-use\\bench\\browser-calc-013123.log"
+                 }
+             ],
+    "provider":  "deepseek",
+    "totalTokens":  10354
+}

@@ -1,0 +1,22 @@
+{
+    "total":  1,
+    "avgSeconds":  0,
+    "startedAt":  "2026-10-27T01:44:20",
+    "pass":  0,
+    "avgSteps":  0,
+    "model":  "deepseek-chat",
+    "rows":  [
+                 {
+                     "case":  "close-dxdiag",
+                     "ok":  false,
+                     "steps":  0,
+                     "seconds":  0,
+                     "tokens":  0,
+                     "done":  false,
+                     "expect":  "DirectX 窗口消失",
+                     "log":  "(准备失败)"
+                 }
+             ],
+    "provider":  "deepseek",
+    "totalTokens":  0
+}

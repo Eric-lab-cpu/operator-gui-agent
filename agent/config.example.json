@@ -1,0 +1,5 @@
+﻿{
+  "ollama":    { "baseUrl": "http://127.0.0.1:11434" },
+  "openai":    { "baseUrl": "https://api.openai.com/v1", "apiKeyEnv": "OPENAI_API_KEY" },
+  "anthropic": { "baseUrl": "https://api.anthropic.com", "apiKeyEnv": "ANTHROPIC_API_KEY" }
+}

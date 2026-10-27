@@ -1,0 +1,27 @@
+# 运行产物与密钥不入库
+ipc/
+agent/run/
+web/history/
+web/console.pid
+web/console.log
+web/server.log
+web/server.err
+*.log
+launcher.log
+*.tmp
+
+# 密钥（本地文件，勿提交）
+agent/keys.json
+
+# 构建产物
+dist/
+*.zip
+bin/*.pdb
+
+# 截图（体积大）
+demo/shots/
+
+# 系统
+Thumbs.db
+desktop.ini
+.DS_Store

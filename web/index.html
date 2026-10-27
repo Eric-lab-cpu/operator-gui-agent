@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Operator · GUI Agent 控制台</title>
+<style>
+  :root{
+    --bg:#05070d;
+    --ink:#eaeef7;
+    --dim:#7d8aa3;
+    --line:rgba(255,255,255,.075);
+    --glass:rgba(255,255,255,.04);
+    --glass2:rgba(255,255,255,.07);
+    --mint:#5eead4;
+    --violet:#a78bfa;
+    --blue:#60a5fa;
+    --amber:#fbbf24;
+    --rose:#fb7185;
+    --mono:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    color:var(--ink);
+    font:14px/1.5 "Inter","Segoe UI Variable Text","Microsoft YaHei UI",system-ui,sans-serif;
+    background:var(--bg);
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* 背景：极光 */
+  .aurora{position:fixed;inset:-20%;z-index:0;filter:blur(70px);opacity:.55;pointer-events:none}
+  .aurora i{position:absolute;border-radius:50%;mix-blend-mode:screen;animation:drift 26s ease-in-out infinite alternate}
+  .aurora i:nth-child(1){width:46vw;height:46vw;left:-6vw;top:-10vh;background:radial-gradient(circle,rgba(94,234,212,.55),transparent 65%)}
+  .aurora i:nth-child(2){width:42vw;height:42vw;right:-8vw;top:-6vh;background:radial-gradient(circle,rgba(167,139,250,.5),transparent 65%);animation-delay:-8s}
+  .aurora i:nth-child(3){width:38vw;height:38vw;left:28vw;bottom:-18vh;background:radial-gradient(circle,rgba(96,165,250,.4),transparent 65%);animation-delay:-15s}
+  @keyframes drift{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(3vw,-3vh,0) scale(1.12)}}
+
+  .shell{position:relative;z-index:1;height:100vh;display:grid;grid-template-columns:308px minmax(0,1fr) 356px;grid-template-rows:60px 1fr}
+  .bar{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:0 20px;border-bottom:1px solid var(--line);
+       background:linear-gradient(180deg,rgba(255,255,255,.035),transparent);backdrop-filter:blur(14px)}
+  .mark{width:28px;height:28px;border-radius:9px;position:relative;flex:0 0 auto;
+        background:conic-gradient(from 210deg,var(--mint),var(--blue),var(--violet),var(--mint));
+        box-shadow:0 0 22px rgba(94,234,212,.35),inset 0 0 0 1px rgba(255,255,255,.25)}
+  .mark::after{content:"";position:absolute;inset:6px;border-radius:4px;background:#070b12}
+  .brand{display:flex;flex-direction:column;line-height:1.15}
+  .brand b{font-size:15px;letter-spacing:.2px}
+  .brand small{color:var(--dim);font-size:11.5px;letter-spacing:.34em;text-transform:uppercase}
+  .grow{flex:1}
+  .chip{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 13px;border-radius:999px;
+        border:1px solid var(--line);background:var(--glass);font-size:12.5px;color:var(--dim);white-space:nowrap}
+  .chip.on{color:#c8f7ec;border-color:rgba(94,234,212,.32);background:rgba(94,234,212,.08)}
+  .chip.off{color:#ffd4d9;border-color:rgba(251,113,133,.32);background:rgba(251,113,133,.08)}
+  .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+  .chip.on .dot{box-shadow:0 0 0 0 rgba(94,234,212,.55);animation:pulse 2.2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(94,234,212,.5)}70%{box-shadow:0 0 0 8px rgba(94,234,212,0)}100%{box-shadow:0 0 0 0 rgba(94,234,212,0)}}
+
+  /* token 表 */
+  .tokens{display:flex;align-items:center;gap:12px;height:38px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:var(--glass)}
+  .tokens .num{font-family:var(--mono);font-size:15px;color:#e8fff9;letter-spacing:.3px}
+  .tokens .lbl{font-size:10.5px;color:var(--dim);letter-spacing:.12em;text-transform:uppercase}
+  .tokens .split{width:1px;height:22px;background:var(--line)}
+  .tokens .sub{font-family:var(--mono);font-size:11.5px;color:var(--dim)}
+  .spark{width:64px;height:22px}
+
+  aside{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;background:rgba(8,11,18,.55);backdrop-filter:blur(16px)}
+  .scroll{overflow:auto;padding:16px 16px 24px;display:flex;flex-direction:column;gap:14px}
+  .lab{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);margin-bottom:7px}
+  textarea,input,select{
+    width:100%;background:var(--glass);border:1px solid var(--line);color:var(--ink);border-radius:12px;
+    padding:11px 12px;font:inherit;font-size:13px;outline:none;transition:.16s
+  }
+  textarea{resize:none;height:92px;line-height:1.6}
+  textarea:focus,input:focus,select:focus{border-color:rgba(94,234,212,.4);background:var(--glass2);box-shadow:0 0 0 3px rgba(94,234,212,.09)}
+  select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--dim) 50%),linear-gradient(135deg,var(--dim) 50%,transparent 50%);
+         background-position:calc(100% - 18px) 52%,calc(100% - 13px) 52%;background-size:5px 5px;background-repeat:no-repeat;padding-right:34px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .tg{display:flex;align-items:center;gap:9px;height:42px;padding:0 12px;border-radius:12px;border:1px solid var(--line);background:var(--glass);font-size:12.5px;color:var(--dim);cursor:pointer;transition:.16s;user-select:none}
+  .tg:hover{background:var(--glass2)}
+  .tg input{appearance:none;width:32px;height:18px;border-radius:999px;background:rgba(255,255,255,.13);position:relative;transition:.2s;flex:0 0 auto;margin:0;padding:0}
+  .tg input:checked{background:linear-gradient(90deg,var(--mint),var(--blue))}
+  .tg input::after{content:"";position:absolute;top:3px;left:3px;width:12px;height:12px;border-radius:50%;background:#fff;transition:.2s}
+  .tg input:checked::after{left:17px}
+  .tg:has(input:checked){color:#d6fef6;border-color:rgba(94,234,212,.28)}
+  .btn{width:100%;height:44px;border:0;border-radius:13px;font:inherit;font-weight:650;font-size:13.5px;cursor:pointer;transition:.18s;
+       color:#03130f;background:linear-gradient(135deg,#5eead4,#7dd3fc);box-shadow:0 12px 32px -16px rgba(94,234,212,.9)}
+  .btn:hover{transform:translateY(-1px);filter:brightness(1.05)}
+  .btn:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+  .btn.ghost{background:var(--glass);color:var(--ink);border:1px solid var(--line);box-shadow:none;font-weight:500}
+  .btn.ghost:hover{background:var(--glass2)}
+  .hint{font-size:11.5px;color:var(--dim);line-height:1.6}
+
+  .hist{display:flex;flex-direction:column;gap:7px;max-height:100%;overflow:auto;padding-right:2px}
+  .hitem{border:1px solid var(--line);background:var(--glass);border-radius:11px;padding:9px 11px;cursor:pointer;transition:.15s}
+  .hitem:hover{background:var(--glass2);border-color:rgba(167,139,250,.28)}
+  .hitem .t{font-size:12.5px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .hitem .m{display:flex;gap:6px;align-items:center;margin-top:5px;font-family:var(--mono);font-size:10px;color:var(--dim);white-space:nowrap;overflow:hidden}
+  .st{width:6px;height:6px;border-radius:50%;background:var(--dim)}
+  .st.done{background:var(--mint)}
+  .st.stopped{background:var(--amber)}
+  .st.running{background:var(--blue);animation:pulse 1.6s infinite}
+
+  main{display:flex;flex-direction:column;min-width:0;min-height:0}
+  .thead{display:flex;align-items:center;gap:10px;height:48px;padding:0 20px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.015)}
+  .thead h2{margin:0;font-size:12.5px;font-weight:600;letter-spacing:.04em;color:#cfd8ea}
+  .tag{font-family:var(--mono);font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:7px;padding:2px 8px}
+  .trace{flex:1;overflow:auto;padding:16px 20px 60px;font-family:var(--mono);font-size:12.5px;line-height:1.8}
+  .ln{display:grid;grid-template-columns:74px 1fr;gap:12px;padding:3px 0;animation:in .22s ease}
+  @keyframes in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+  .ln .ts{color:#39435a;font-size:11px;padding-top:2px}
+  .ln .tx{white-space:pre-wrap;word-break:break-word}
+  .k1 .tx{color:#7cf0da}  .k2 .tx{color:#b9a6ff}
+  .k3 .tx{color:#8fb6ff}  .k4 .tx{color:#ffa8b4}
+  .k5 .tx{color:#ffd88a}  .k0 .tx{color:#96a3ba}
+  .empty{margin:auto;text-align:center;color:var(--dim);padding:70px 24px}
+  .empty .big{font-size:15px;color:#cdd7e9;margin-bottom:6px}
+
+  section.r{border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;background:rgba(8,11,18,.55);backdrop-filter:blur(16px)}
+  .pane{padding:14px 16px;border-bottom:1px solid var(--line)}
+  .pane.grow{flex:1;min-height:0;display:flex;flex-direction:column;border-bottom:0}
+  .shot{position:relative;border-radius:13px;overflow:hidden;border:1px solid var(--line);background:#04060b;aspect-ratio:16/10}
+  .shot img{width:100%;height:100%;object-fit:contain;display:none}
+  .shot .ph{position:absolute;inset:0;display:grid;place-items:center;color:#31394b;font-size:12px}
+  .wins{overflow:auto;margin-top:10px;display:flex;flex-direction:column;gap:6px}
+  .w{display:flex;flex-direction:column;gap:2px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--glass);transition:.15s}
+  .w:hover{background:var(--glass2)}
+  .w .n{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .w .m{font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+  .w.fg{border-color:rgba(94,234,212,.3);background:rgba(94,234,212,.06)}
+  .w.fg .n{color:#a9f5e6}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:9px}
+  ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.16)}
+</style>
+</head>
+<body>
+<div class="aurora"><i></i><i></i><i></i></div>
+
+<div class="shell">
+  <div class="bar">
+    <div class="mark"></div>
+    <div class="brand"><b>Operator</b><small>GUI Agent</small></div>
+
+    <div class="grow"></div>
+
+    <div class="tokens">
+      <div>
+        <div class="lbl">Tokens</div>
+        <div class="num" id="tokTotal">0</div>
+      </div>
+      <div class="split"></div>
+      <div class="sub">入 <b id="tokIn">0</b><br>出 <b id="tokOut">0</b></div>
+      <canvas class="spark" id="spark" width="128" height="44"></canvas>
+    </div>
+
+    <div class="chip" id="workerChip"><span class="dot"></span><span id="workerText">连接中</span></div>
+    <div class="chip" id="modelChip">ollama / gemma4:e4b</div>
+  </div>
+
+  <aside>
+    <div class="scroll">
+      <div>
+        <div class="lab">任务</div>
+        <textarea id="task" placeholder="用一句话描述目标：&#10;· 把 DirectX 诊断工具窗口关掉&#10;· 打开计算器，算 37 × 24"></textarea>
+      </div>
+
+      <div>
+        <div class="lab">模型</div>
+        <div class="two">
+          <select id="provider">
+            <option value="deepseek">deepseek</option>
+            <option value="ollama">ollama</option>
+            <option value="openai">openai</option>
+            <option value="moonshot">moonshot</option>
+            <option value="dashscope">dashscope</option>
+            <option value="zhipu">zhipu</option>
+            <option value="siliconflow">siliconflow</option>
+            <option value="groq">groq</option>
+            <option value="anthropic">anthropic</option>
+          </select>
+          <input id="model" value="deepseek-chat">
+        </div>
+      </div>
+
+      <div class="two">
+        <label class="tg"><input type="checkbox" id="opt-plan">计划</label>
+        <label class="tg"><input type="checkbox" id="opt-shot">多模态</label>
+      </div>
+
+      <div class="two">
+        <div><div class="lab">最大步数</div><input id="steps" type="number" min="1" max="30" value="8"></div>
+        <div><div class="lab">截图刷新</div><select id="refresh"><option value="3000">3 秒</option><option value="6000">6 秒</option><option value="0">关闭</option></select></div>
+      </div>
+
+      <button class="btn" id="run">开始执行</button>
+      <button class="btn ghost" id="stop">停止</button>
+      <div class="hint">动作前有前台校验、DPI 校验、关窗护栏；模型只决定做什么。</div>
+
+      <div>
+        <div class="lab" style="display:flex;justify-content:space-between;align-items:center">
+          <span>历史</span>
+          <span id="clearHist" style="cursor:pointer;letter-spacing:0;text-transform:none;color:#5f6b83">清空</span>
+        </div>
+        <div class="hist" id="hist"></div>
+      </div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="thead">
+      <h2>执行轨迹</h2>
+      <span class="tag" id="state">空闲</span>
+      <div class="grow"></div>
+      <span class="tag" id="elapsed">—</span>
+      <span class="tag" id="stepsTag">0 步</span>
+    </div>
+    <div class="trace" id="trace">
+      <div class="empty"><div class="big">还没有任务</div><div>写下目标，点「开始执行」</div></div>
+    </div>
+  </main>
+
+  <section class="r">
+    <div class="pane">
+      <div class="lab">前台窗口</div>
+      <div class="shot" id="shotWrap">
+        <div class="ph" id="shotPh">等待截图</div>
+        <img id="shot" alt="">
+      </div>
+    </div>
+    <div class="pane grow">
+      <div class="lab">窗口</div>
+      <div class="wins" id="wins"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const traceEl = $('#trace');
+let timer = null, startedAt = 0, lastLineCount = 0, running = false;
+let sparkData = [];
+
+/* ── 渲染轨迹 ── */
+function cls(l) {
+  if (/^\[step/.test(l)) return 'k1';
+  if (/^\s+动作:/.test(l)) return 'k2';
+  if (/用量:|状态指纹|完成:/.test(l)) return 'k3';
+  if (/失败|错误|ERROR|拒绝/.test(l)) return 'k4';
+  if (/没有变化|重复动作|注意|未确认|停止/.test(l)) return 'k5';
+  return 'k0';
+}
+function ts() {
+  return new Date().toLocaleTimeString('zh-CN', { hour12: false });
+}
+function addLine(text) {
+  const e = traceEl.querySelector('.empty');
+  if (e) e.remove();
+  const d = document.createElement('div');
+  d.className = 'ln ' + cls(text);
+  d.innerHTML = '<span class="ts"></span><span class="tx"></span>';
+  d.querySelector('.ts').textContent = ts();
+  d.querySelector('.tx').textContent = text;
+  traceEl.appendChild(d);
+  traceEl.scrollTop = traceEl.scrollHeight;
+}
+function renderAll(text) {
+  traceEl.innerHTML = '';
+  const lines = text.split(/\r?\n/).filter(l => l.trim() && !l.startsWith('__USAGE__') && !l.startsWith('__TOKENS__') && l !== '__AGENT_DONE__');
+  lines.forEach(addLine);
+  lastLineCount = lines.length;
+}
+
+/* ── token ── */
+function fmt(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(2) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+  return String(n);
+}
+function setTokens(t) {
+  $('#tokTotal').textContent = fmt(t.total || 0);
+  $('#tokIn').textContent = fmt(t.prompt || 0);
+  $('#tokOut').textContent = fmt(t.completion || 0);
+  if (t.total) { sparkData.push(t.total); if (sparkData.length > 24) sparkData.shift(); drawSpark(); }
+}
+function drawSpark() {
+  const c = $('#spark'), ctx = c.getContext('2d');
+  const w = c.width, h = c.height;
+  ctx.clearRect(0, 0, w, h);
+  if (sparkData.length < 2) return;
+  const max = Math.max(...sparkData, 1), min = Math.min(...sparkData, 0);
+  const x = i => (i / (sparkData.length - 1)) * (w - 4) + 2;
+  const y = v => h - 4 - ((v - min) / Math.max(max - min, 1)) * (h - 10);
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, 'rgba(94,234,212,.55)');
+  g.addColorStop(1, 'rgba(94,234,212,0)');
+  ctx.beginPath();
+  ctx.moveTo(x(0), y(sparkData[0]));
+  sparkData.forEach((v, i) => ctx.lineTo(x(i), y(v)));
+  ctx.lineTo(x(sparkData.length - 1), h); ctx.lineTo(x(0), h); ctx.closePath();
+  ctx.fillStyle = g; ctx.fill();
+  ctx.beginPath();
+  sparkData.forEach((v, i) => i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v)));
+  ctx.strokeStyle = '#5eead4'; ctx.lineWidth = 1.6; ctx.stroke();
+}
+
+/* ── 状态 ── */
+async function api(p, o) { const r = await fetch(p, o); return r.json().catch(() => ({})); }
+
+function renderHistory(items) {
+  const box = $('#hist');
+  box.innerHTML = '';
+  (items || []).forEach(it => {
+    const d = document.createElement('div');
+    d.className = 'hitem';
+    const t = new Date(it.startedAt);
+    const st = it.status || 'stopped';
+    d.innerHTML = `<div class="t"></div>
+      <div class="m"><span class="st ${st}"></span><span>${t.toLocaleString('zh-CN',{hour12:false})}</span>
+      <span>·</span><span>${it.model || it.provider}</span><span>·</span><span>${fmt((it.tokens && it.tokens.total) || 0)} tok</span></div>`;
+    d.querySelector('.t').textContent = it.task;
+    d.onclick = async () => {
+      const r = await api('/api/history/' + it.id);
+      if (r.ok) { renderAll(r.text); $('#state').textContent = '历史记录'; $('#stepsTag').textContent = '只读'; }
+    };
+    box.appendChild(d);
+  });
+}
+
+async function pollState() {
+  const s = await api('/api/state');
+  const chip = $('#workerChip');
+  chip.className = 'chip ' + (s.worker ? 'on' : 'off');
+  $('#workerText').textContent = s.worker ? 'worker 在线' : 'worker 离线';
+
+  renderHistory(s.history);
+
+  if (s.foreground) {
+    $('#shot').style.display = 'block';
+    $('#shotPh').style.display = 'none';
+    $('#shot').src = '/api/shot?t=' + Date.now();
+  }
+
+  const wins = $('#wins');
+  wins.innerHTML = '';
+  (s.windows || []).forEach(w => {
+    const d = document.createElement('div');
+    d.className = 'w' + (s.foreground && s.foreground.Hwnd === w.Hwnd ? ' fg' : '');
+    d.innerHTML = '<div class="n"></div><div class="m"></div>';
+    d.querySelector('.n').textContent = w.Title;
+    d.querySelector('.m').textContent = `hwnd ${w.Hwnd} · ${w.Width}×${w.Height}`;
+    wins.appendChild(d);
+  });
+
+  // 页面刚打开时，自动把最近一次运行的结果载入轨迹
+  if (!s.running && s.history && s.history.length && !traceEl.dataset.loaded) {
+    traceEl.dataset.loaded = '1';
+    const r = await api('/api/history/' + s.history[0].id);
+    if (r.ok) {
+      renderAll(r.text);
+      $('#state').textContent = '上次运行';
+      $('#stepsTag').textContent = ((r.text.match(/^\[step /gm) || []).length) + ' 步';
+      if (r.meta && r.meta.tokens) setTokens(r.meta.tokens);
+    }
+  }
+
+  running = s.running;
+  if (s.running) {
+    $('#state').textContent = '运行中';
+    $('#run').disabled = true;
+  } else if ($('#state').textContent === '运行中') {
+    $('#state').textContent = '结束';
+    $('#run').disabled = false;
+    clearInterval(timer);
+  }
+}
+
+async function pollLog() {
+  if (!running) return;
+  const d = await api('/api/log');
+  if (!d.ok) return;
+  const lines = (d.text || '').split(/\r?\n/).filter(l => l.trim() && !l.startsWith('__USAGE__') && !l.startsWith('__TOKENS__') && l !== '__AGENT_DONE__');
+  for (let i = lastLineCount; i < lines.length; i++) addLine(lines[i]);
+  lastLineCount = Math.max(lastLineCount, lines.length);
+  if (d.tokens) setTokens(d.tokens);
+  const steps = (d.text.match(/^\[step /gm) || []).length;
+  $('#stepsTag').textContent = steps + ' 步';
+}
+
+function startTimer() {
+  startedAt = Date.now();
+  clearInterval(timer);
+  timer = setInterval(() => {
+    const s = Math.floor((Date.now() - startedAt) / 1000);
+    $('#elapsed').textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }, 500);
+}
+
+/* ── 动作 ── */
+async function run() {
+  const body = {
+    task: $('#task').value.trim(),
+    provider: $('#provider').value,
+    model: $('#model').value.trim(),
+    maxSteps: Number($('#steps').value) || 8,
+    plan: $('#opt-plan').checked,
+    screenshot: $('#opt-shot').checked
+  };
+  if (!body.task) { $('#task').focus(); return; }
+
+  traceEl.innerHTML = '';
+  lastLineCount = 0; sparkData = []; drawSpark();
+  setTokens({ total: 0, prompt: 0, completion: 0 });
+  $('#run').disabled = true;
+  $('#state').textContent = '运行中';
+  startTimer();
+
+  const r = await api('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!r.ok) {
+    addLine('启动失败: ' + (r.error || ''));
+    $('#run').disabled = false; $('#state').textContent = '空闲';
+    return;
+  }
+  running = true;
+}
+
+$('#run').onclick = run;
+$('#stop').onclick = async () => { await api('/api/stop', { method: 'POST' }); $('#state').textContent = '已停止'; };
+$('#clearHist').onclick = async () => { await api('/api/history/clear', { method: 'POST' }); pollState(); };
+
+const modelMap = {
+  deepseek: 'deepseek-chat', ollama: 'gemma4:e4b', openai: 'gpt-4o', moonshot: 'moonshot-v1-8k',
+  dashscope: 'qwen-vl-max', zhipu: 'glm-4v-plus', siliconflow: 'Qwen/Qwen2.5-VL-7B-Instruct',
+  groq: 'llama-3.2-11b-vision-preview', anthropic: 'claude-sonnet-4-20250514'
+};
+$('#provider').onchange = () => {
+  $('#model').value = modelMap[$('#provider').value] || '';
+  $('#modelChip').textContent = $('#provider').value + ' / ' + $('#model').value;
+};
+$('#model').oninput = () => { $('#modelChip').textContent = $('#provider').value + ' / ' + $('#model').value; };
+
+$('#modelChip').textContent = $('#provider').value + ' / ' + $('#model').value;
+pollState();
+setInterval(pollState, 2500);
+setInterval(pollLog, 700);
+setInterval(() => {
+  if ($('#refresh').value !== '0' && $('#shot').style.display === 'block') {
+    $('#shot').src = '/api/shot?t=' + Date.now();
+  }
+}, 3500);
+</script>
+</body>
+</html>

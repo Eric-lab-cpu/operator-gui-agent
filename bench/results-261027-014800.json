@@ -1,0 +1,22 @@
+{
+    "total":  1,
+    "avgSeconds":  0,
+    "startedAt":  "2026-10-27T01:48:00",
+    "pass":  0,
+    "avgSteps":  0,
+    "model":  "deepseek-chat",
+    "rows":  [
+                 {
+                     "case":  "browser-calc",
+                     "ok":  false,
+                     "steps":  0,
+                     "seconds":  0,
+                     "tokens":  0,
+                     "done":  false,
+                     "expect":  "页面出现「合计：75 元」",
+                     "log":  "(准备失败)"
+                 }
+             ],
+    "provider":  "deepseek",
+    "totalTokens":  0
+}

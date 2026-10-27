@@ -1,0 +1,13 @@
+{
+    "total":  0,
+    "avgSeconds":  0,
+    "startedAt":  "2026-10-27T01:30:53",
+    "pass":  0,
+    "avgSteps":  0,
+    "model":  "deepseek-chat",
+    "rows":  [
+
+             ],
+    "provider":  "deepseek",
+    "totalTokens":  null
+}

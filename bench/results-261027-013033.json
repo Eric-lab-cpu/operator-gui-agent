@@ -1,0 +1,62 @@
+{
+    "total":  5,
+    "avgSeconds":  14.1,
+    "startedAt":  "2026-10-27T01:30:33",
+    "pass":  3,
+    "avgSteps":  3,
+    "model":  "deepseek-chat",
+    "rows":  [
+                 {
+                     "case":  "close-dxdiag",
+                     "ok":  true,
+                     "steps":  1,
+                     "seconds":  6.1,
+                     "tokens":  1061,
+                     "done":  true,
+                     "expect":  "DirectX 窗口消失",
+                     "log":  "C:\\Users\\18790\\Desktop\\workbuddy\\混合区\\computer-use\\bench\\close-dxdiag-012839.log"
+                 },
+                 {
+                     "case":  "close-sysdm",
+                     "ok":  true,
+                     "steps":  1,
+                     "seconds":  5.1,
+                     "tokens":  759,
+                     "done":  true,
+                     "expect":  "系统属性窗口消失",
+                     "log":  "C:\\Users\\18790\\Desktop\\workbuddy\\混合区\\computer-use\\bench\\close-sysdm-012854.log"
+                 },
+                 {
+                     "case":  "read-computername",
+                     "ok":  false,
+                     "steps":  4,
+                     "seconds":  17.1,
+                     "tokens":  3919,
+                     "done":  false,
+                     "expect":  "日志里出现计算机名「一棵大树」",
+                     "log":  "C:\\Users\\18790\\Desktop\\workbuddy\\混合区\\computer-use\\bench\\read-computername-012907.log"
+                 },
+                 {
+                     "case":  "browser-calc",
+                     "ok":  false,
+                     "steps":  5,
+                     "seconds":  25.2,
+                     "tokens":  5644,
+                     "done":  false,
+                     "expect":  "页面出现「合计：75 元」",
+                     "log":  "C:\\Users\\18790\\Desktop\\workbuddy\\混合区\\computer-use\\bench\\browser-calc-012931.log"
+                 },
+                 {
+                     "case":  "dxdiag-gpu",
+                     "ok":  true,
+                     "steps":  4,
+                     "seconds":  17.2,
+                     "tokens":  6844,
+                     "done":  true,
+                     "expect":  "日志里出现显卡型号",
+                     "log":  "C:\\Users\\18790\\Desktop\\workbuddy\\混合区\\computer-use\\bench\\dxdiag-gpu-013006.log"
+                 }
+             ],
+    "provider":  "deepseek",
+    "totalTokens":  18227
+}

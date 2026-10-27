@@ -1,0 +1,12 @@
+{
+  "port": 6360,
+  "node": "",
+  "agent": {
+    "defaultProvider": "deepseek",
+    "defaultModel": "deepseek-chat",
+    "maxSteps": 8
+  },
+  "worker": {
+    "taskName": "DSH-GUI-Worker"
+  }
+}

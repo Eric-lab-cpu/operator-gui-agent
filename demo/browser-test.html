@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>CU 浏览器验证页</title>
+<style>
+  body { font-family: "Microsoft YaHei UI", sans-serif; background:#14161c; color:#e6e6e6; padding:48px; }
+  h1 { font-size:22px; font-weight:600; }
+  label { display:block; margin:16px 0 6px; color:#8fa3bf; font-size:13px; }
+  input { width:220px; padding:10px 12px; font-size:16px; border-radius:8px; border:1px solid #2f3a4d; background:#1c2029; color:#fff; }
+  button { margin-top:22px; padding:11px 26px; font-size:15px; border-radius:8px; border:0; background:#2f6feb; color:#fff; cursor:pointer; }
+  #result { margin-top:28px; font-size:26px; font-weight:700; color:#6ee7b7; }
+</style>
+</head>
+<body>
+  <h1>采购小单</h1>
+
+  <label for="qty">数量</label>
+  <input id="qty" name="qty" value="">
+
+  <label for="price">单价</label>
+  <input id="price" name="price" value="">
+
+  <button id="calc" onclick="
+    var q = parseFloat(document.getElementById('qty').value) || 0;
+    var p = parseFloat(document.getElementById('price').value) || 0;
+    document.getElementById('result').textContent = '合计：' + (q * p) + ' 元';
+  ">计算</button>
+
+  <div id="result">合计：0 元</div>
+</body>
+</html>
