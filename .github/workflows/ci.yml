@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  # ── 无桌面检查：语法 + 服务启动 + HTTP 接口 ─────────────────
+  check:
+    name: 检查（语法 / 服务 / 接口）
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 环境信息
+        shell: pwsh
+        run: |
+          $PSVersionTable.PSVersion
+          node --version
+          python --version
+
+      - name: 运行 CI 检查
+        shell: pwsh
+        run: ./ci/ci-headless.ps1
+
+  # ── 打包：产出可分发的 zip ──────────────────────────────────
+  package:
+    name: 打包分发包
+    needs: check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 打包
+        shell: pwsh
+        run: ./package.ps1
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: Operator-dist
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  # ── GUI 全量自检：托管 runner 没有桌面，必须自托管 ──────────
+  # 仓库设置 → Variables 里加 ENABLE_GUI_CI=true，并挂一台带桌面的
+  # self-hosted runner（标签：self-hosted, windows, gui）即可启用。
+  gui-selftest:
+    name: GUI 全量自检（自托管）
+    needs: check
+    if: vars.ENABLE_GUI_CI == 'true'
+    runs-on: [self-hosted, windows, gui]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 应用自检（需要真实桌面与 worker）
+        shell: pwsh
+        run: ./selftest-app.ps1
