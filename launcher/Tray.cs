@@ -17,6 +17,9 @@ namespace OperatorTray
 {
     static class NativeIcon
     {
+        [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        public static extern int SetCurrentProcessExplicitAppUserModelID(string appId);
+
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         public static extern bool DestroyIcon(IntPtr h);
     }
@@ -43,7 +46,8 @@ namespace OperatorTray
         static bool lastOk = false;
         static int downCount = 0;      // 服务连续不可用次数
         static int workerDown = 0;
-        static bool promoted = false;     // worker 连续离线次数
+        static bool promoted = false;
+        static bool loggedOnce = false;     // worker 连续离线次数
 
         [STAThread]
         static void Main(string[] args)
@@ -56,6 +60,13 @@ namespace OperatorTray
 
             BaseDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\');
             LoadPort();
+
+            // Win11 对没有 AUMID 的进程经常不显示托盘图标
+            NativeIcon.SetCurrentProcessExplicitAppUserModelID("Operator.GUIAgent");
+            AppDomain.CurrentDomain.UnhandledException += (s, e) => Log("崩溃: " + e.ExceptionObject);
+            Application.ThreadException += (s, e) => Log("UI异常: " + e.Exception);
+            Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+            Log("Main 进入");
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
@@ -135,7 +146,7 @@ namespace OperatorTray
                 {
                     if (root == null) { Log("通知区注册表不可用"); return; }
                     string[] names = root.GetSubKeyNames();
-                    Log("通知区条目数: " + names.Length);
+                    if (!loggedOnce) { Log("通知区条目数: " + names.Length); loggedOnce = true; }
                     foreach (string name in names)
                     {
                         using (var k = root.OpenSubKey(name, false))

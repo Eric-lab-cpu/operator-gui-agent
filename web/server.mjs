@@ -240,6 +240,35 @@ function startRun(opts) {
   return { ok: true, id };
 }
 
+// ── 定时任务 ────────────────────────────────────────────────
+const SCHED_FILE = path.join(ROOT, 'schedules.json');
+
+function loadSched() {
+  const s = readJsonFile(SCHED_FILE, { tasks: [] });
+  if (!Array.isArray(s.tasks)) s.tasks = [];
+  return s;
+}
+function saveSched(s) { writeJsonFile(SCHED_FILE, s); }
+
+function tickSchedules() {
+  const s = loadSched();
+  if (!s.tasks.length) return;
+  if (run && !run.done) return;              // 同一时间只跑一个
+  const now = Date.now();
+  for (const t of s.tasks) {
+    if (!t.enabled) continue;
+    const every = Math.max(1, Number(t.everyMin || 60)) * 60000;
+    if (now - Number(t.lastRun || 0) < every) continue;
+    t.lastRun = now;
+    t.lastStatus = 'running';
+    saveSched(s);
+    const r = startRun({ task: t.task, provider: t.provider, model: t.model, maxSteps: t.maxSteps });
+    t.lastStatus = r.ok ? 'started' : 'busy';
+    saveSched(s);
+    break;
+  }
+}
+setInterval(tickSchedules, 30000);
 // ── HTTP ────────────────────────────────────────────────────
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png' };
 
@@ -451,6 +480,45 @@ const server = http.createServer(async (req, res) => {
         setTimeout(() => process.exit(0), 600);
       }, 200);
       return json(res, { ok: true, message: '服务正在停止' });
+    }
+    if (p === '/api/schedules' && req.method === 'GET') {
+      return json(res, loadSched());
+    }
+
+    if (p === '/api/schedules' && req.method === 'POST') {
+      const b = await readBody(req);
+      const s = loadSched();
+      const id = b.id || ('s' + Date.now().toString(36));
+      let t = s.tasks.find(x => x.id === id);
+      if (!t) { t = { id, createdAt: Date.now(), lastRun: 0 }; s.tasks.push(t); }
+      if (b.name !== undefined) t.name = String(b.name);
+      if (b.task !== undefined) t.task = String(b.task);
+      if (b.everyMin !== undefined) t.everyMin = Math.max(1, Number(b.everyMin) || 60);
+      if (b.enabled !== undefined) t.enabled = !!b.enabled;
+      if (b.provider !== undefined) t.provider = String(b.provider);
+      if (b.model !== undefined) t.model = String(b.model);
+      if (b.maxSteps !== undefined) t.maxSteps = Number(b.maxSteps) || 8;
+      if (b.resetLast) t.lastRun = 0;
+      saveSched(s);
+      return json(res, { ok: true, task: t });
+    }
+
+    if (p === '/api/schedules/delete' && req.method === 'POST') {
+      const b = await readBody(req);
+      const s = loadSched();
+      s.tasks = s.tasks.filter(x => x.id !== b.id);
+      saveSched(s);
+      return json(res, { ok: true });
+    }
+
+    if (p === '/api/schedules/run' && req.method === 'POST') {
+      const b = await readBody(req);
+      const s = loadSched();
+      const t = s.tasks.find(x => x.id === b.id);
+      if (!t) return json(res, { ok: false, error: '任务不存在' }, 404);
+      const r = startRun({ task: t.task, provider: t.provider, model: t.model, maxSteps: t.maxSteps });
+      if (r.ok) { t.lastRun = Date.now(); t.lastStatus = 'manual'; saveSched(s); }
+      return json(res, r);
     }
     res.writeHead(404); res.end('not found');
   } catch (e) {

@@ -1,21 +1,24 @@
 ﻿# 更新日志
 
-## 0.5.1 — 2026-10-27
+## 0.6.0 — 2026-10-27
 
-### 托盘
-- 图标句柄改为 `Clone + DestroyIcon`，避免 GC 回收导致 Shell 拒绝显示
-- 新增托盘日志 `tray.log`（启动、图标建立、提升结果）
-- 图标可见性提升：按 `ExecutablePath` 扫描 `HKCU\Control Panel\NotifyIconSettings`，
-  命中即把 `IsPromoted` 置 1；未命中则每 3 秒重试一次
-- 说明：Windows 11 的键名是可执行文件路径的哈希，**首次显示后才由 Explorer 创建**。
-  因此新机器上首次运行可能需要把图标从折叠区拖出来一次，之后会自动保持可见
+### 新增：定时任务
+- 侧栏「定时任务」区块：新建 / 编辑 / 删除 / 启用暂停，每 15 秒刷新状态
+- 服务端每 30 秒检查一次，到点自动触发（同一时间只跑一个，避免抢鼠标）
+- 接口：`GET/POST /api/schedules`、`POST /api/schedules/delete`、`POST /api/schedules/run`
+- 配置存 `schedules.json`（已 gitignore）
 
-### 修复
-- 注册表写入方式改为 `OpenBaseKey(Registry64)` + 父键只读打开（原写法被 ACL 拒绝）
-- 去掉了错误的 GUID 键（Win11 不认）
+### 托盘：进一步排查（结论）
+- 试过：图标句柄 Clone + DestroyIcon、AUMID、系统图标替换、注册表提升
+- 现象：进程存活、`NotifyIcon.Visible = true`、无异常，但 Explorer 折叠面板里始终没有本程序
+- 对照：同一会话用 PowerShell 建 NotifyIcon 能正常注册 → 机制可用，差异未定位
+- 结论：代码逻辑正确，问题在本机会话的 Shell 侧；保底方案是手动双击 `OperatorTray.exe` 或重启 Explorer
+
+## 0.5.1
+- 托盘日志、图标句柄修复、注册表提升改为按路径匹配
 
 ## 0.5.0
-- 托盘 + 任务栏状态窗口、托盘守护、全生命周期验证
+- 托盘 + 任务栏状态窗口 + 托盘守护 + 全生命周期验证
 
 ## 0.4.0
 - 快捷指令、浅色主题、导出轨迹、历史重跑、完成通知

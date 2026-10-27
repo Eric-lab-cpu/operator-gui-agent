@@ -255,6 +255,13 @@
 
       <div>
         <div class="lab" style="display:flex;justify-content:space-between;align-items:center">
+          <span>定时任务</span>
+          <span id="schedAdd" style="cursor:pointer;letter-spacing:0;text-transform:none;color:#5eead4">＋ 新建</span>
+        </div>
+        <div class="hist" id="schedList"></div>
+      </div>
+      <div>
+        <div class="lab" style="display:flex;justify-content:space-between;align-items:center">
           <span>历史</span>
           <span id="clearHist" style="cursor:pointer;letter-spacing:0;text-transform:none;color:#5f6b83">清空</span>
         </div>
@@ -292,7 +299,38 @@
   </section>
 </div>
 
-  <div class="modal" id="settings">
+    <div class="modal" id="schedModal">
+    <div class="sheet">
+      <h3>⏰ 定时任务</h3>
+      <div class="body">
+        <div class="fld">
+          <label>名称</label>
+          <input id="t-name" placeholder="例如：每小时清理一次弹窗">
+        </div>
+        <div class="fld">
+          <label>任务描述（交给模型执行的指令）</label>
+          <input id="t-task" placeholder="关闭所有 DirectX 诊断工具窗口">
+        </div>
+        <div class="row2">
+          <div class="fld">
+            <label>间隔（分钟）</label>
+            <input id="t-every" type="number" min="1" value="60">
+          </div>
+          <div class="fld">
+            <label>状态</label>
+            <select id="t-enabled"><option value="1">启用</option><option value="0">暂停</option></select>
+          </div>
+        </div>
+        <div class="msg" id="t-msg"></div>
+      </div>
+      <div class="foot">
+        <button class="btn ghost sm" id="t-del" style="margin-right:auto;display:none">删除</button>
+        <button class="btn ghost sm" id="t-cancel">取消</button>
+        <button class="btn sm" id="t-save">保存</button>
+      </div>
+    </div>
+  </div>
+<div class="modal" id="settings">
     <div class="sheet">
       <h3>⚙ API 设置</h3>
       <div class="body">
@@ -709,6 +747,91 @@ function notifyDone(text) {
   document.title = '✔ ' + (text || '完成');
   setTimeout(function () { document.title = old; }, 4000);
 }
+/* ── 定时任务 ── */
+let scheds = [];
+let editingSched = null;
+
+async function loadScheds() {
+  try {
+    const r = await api('/api/schedules');
+    scheds = (r && r.tasks) || [];
+    renderScheds();
+  } catch (e) { }
+}
+
+function renderScheds() {
+  const box = $('#schedList');
+  if (!box) return;
+  box.innerHTML = '';
+  if (!scheds.length) {
+    const d = document.createElement('div');
+    d.className = 'hempty';
+    d.textContent = '没有定时任务';
+    box.appendChild(d);
+    return;
+  }
+  scheds.forEach(t => {
+    const d = document.createElement('div');
+    d.className = 'hitem';
+    const title = document.createElement('div');
+    title.className = 't';
+    title.textContent = (t.enabled ? '▶ ' : '⏸ ') + (t.name || t.task || '未命名');
+    const sub = document.createElement('div');
+    sub.className = 's';
+    const last = t.lastRun ? new Date(t.lastRun).toLocaleTimeString('zh-CN', { hour12: false }) : '未运行';
+    sub.textContent = '每 ' + (t.everyMin || 60) + ' 分钟 · ' + (t.lastStatus || '待命') + ' · ' + last;
+    d.appendChild(title); d.appendChild(sub);
+    d.onclick = () => openSched(t);
+    box.appendChild(d);
+  });
+}
+
+function openSched(t) {
+  editingSched = t || null;
+  $('#t-name').value = t ? (t.name || '') : '';
+  $('#t-task').value = t ? (t.task || '') : $('#task').value;
+  $('#t-every').value = t ? (t.everyMin || 60) : 60;
+  $('#t-enabled').value = (t && t.enabled === false) ? '0' : '1';
+  $('#t-del').style.display = t ? 'inline-block' : 'none';
+  $('#t-msg').className = 'msg';
+  $('#schedModal').classList.add('on');
+}
+
+function closeSched() { $('#schedModal').classList.remove('on'); editingSched = null; }
+
+$('#schedAdd').onclick = () => openSched(null);
+$('#t-cancel').onclick = closeSched;
+$('#schedModal').onclick = (e) => { if (e.target.id === 'schedModal') closeSched(); };
+
+$('#t-save').onclick = async () => {
+  const body = {
+    name: $('#t-name').value.trim() || '未命名任务',
+    task: $('#t-task').value.trim(),
+    everyMin: Number($('#t-every').value) || 60,
+    enabled: $('#t-enabled').value === '1'
+  };
+  if (!body.task) {
+    const m = $('#t-msg'); m.className = 'msg on err'; m.textContent = '任务描述不能为空';
+    return;
+  }
+  if (editingSched) body.id = editingSched.id;
+  const r = await api('/api/schedules', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+  });
+  if (r.ok) { closeSched(); loadScheds(); }
+};
+
+$('#t-del').onclick = async () => {
+  if (!editingSched) return;
+  await api('/api/schedules/delete', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: editingSched.id })
+  });
+  closeSched(); loadScheds();
+};
+
+loadScheds();
+setInterval(loadScheds, 15000);
 </script>
 </body>
 </html>
