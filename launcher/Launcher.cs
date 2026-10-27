@@ -120,6 +120,7 @@ namespace OperatorLauncher
             }
 
             bool silent = (mode == "--silent");
+            SilentMode = silent;
 
             if (!PortOpen(Port))
             {
@@ -137,6 +138,8 @@ namespace OperatorLauncher
                 if (!silent) ShowError("服务 20 秒内没有起来。\n\n端口：" + Port + "\n日志：" + Path.Combine(BaseDir, "web", "console.log"));
                 return 1;
             }
+
+            EnsureTray();
 
             if (!silent)
             {
@@ -260,23 +263,51 @@ namespace OperatorLauncher
         }
         static void StopServer()
         {
-            // 服务启动时把 pid 写到 web\console.pid；按 pid 关比解析 netstat 可靠
-            try
+            // 停服务是个「和守护进程赛跑」的过程：托盘可能把服务又拉起来。
+            // 做法：最多循环 6 轮（先收托盘 → 再收 node → 等一下），直到确认干净。
+            for (int round = 0; round < 6; round++)
             {
-                string pidFile = Path.Combine(BaseDir, "web", "console.pid");
-                if (File.Exists(pidFile))
-                {
-                    int pid;
-                    if (int.TryParse(File.ReadAllText(pidFile).Trim(), out pid))
-                    {
-                        try { Process p = Process.GetProcessById(pid); p.Kill(); p.WaitForExit(5000); } catch { }
-                    }
-                    try { File.Delete(pidFile); } catch { }
-                }
-            }
-            catch { }
-        }
+                // 1) 托住托盘，避免它再重启服务
+                try { foreach (var p in Process.GetProcessesByName("OperatorTray")) { try { p.Kill(); } catch { } } } catch { }
 
+                // 2) 按 pid 文件关主服务
+                try
+                {
+                    string pidFile = Path.Combine(BaseDir, "web", "console.pid");
+                    if (File.Exists(pidFile))
+                    {
+                        int pid;
+                        if (int.TryParse(File.ReadAllText(pidFile).Trim(), out pid))
+                        {
+                            try { Process p = Process.GetProcessById(pid); p.Kill(); p.WaitForExit(3000); } catch { }
+                        }
+                        try { File.Delete(pidFile); } catch { }
+                    }
+                }
+                catch { }
+
+                // 3) 扫掉所有跑 server.mjs 的 node（可能是被托盘拉起的第二实例）
+                bool any = false;
+                try
+                {
+                    var searcher = new System.Management.ManagementObjectSearcher(
+                        "SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name='node.exe'");
+                    foreach (System.Management.ManagementObject mo in searcher.Get())
+                    {
+                        string cmd = (mo["CommandLine"] as string) ?? "";
+                        if (cmd.IndexOf("server.mjs", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                        any = true;
+                        try { Process.GetProcessById(Convert.ToInt32(mo["ProcessId"])).Kill(); } catch { }
+                    }
+                }
+                catch { }
+
+                System.Threading.Thread.Sleep(400);
+
+                bool trayLeft = Process.GetProcessesByName("OperatorTray").Length > 0;
+                if (!any && !trayLeft) return;
+            }
+        }
         // ── worker ────────────────────────────────────────────
         static void EnsureWorker()
         {
@@ -313,6 +344,25 @@ namespace OperatorLauncher
             catch { }
         }
 
+        // ── 托盘 ──────────────────────────────────────────────
+        static bool SilentMode = false;
+        static void EnsureTray()
+        {
+            try
+            {
+                if (Process.GetProcessesByName("OperatorTray").Length > 0) return;
+                string tray = Path.Combine(BaseDir, "OperatorTray.exe");
+                if (!File.Exists(tray)) return;
+                var psi = new ProcessStartInfo(tray, SilentMode ? "--hidden" : "")
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WorkingDirectory = BaseDir
+                };
+                Process.Start(psi);
+            }
+            catch { }
+        }
         // ── 状态 ──────────────────────────────────────────────
         static void ShowStatus()
         {
@@ -344,6 +394,7 @@ namespace OperatorLauncher
                 "目录：" + BaseDir + "\n\n" +
                 "控制台端口：" + Port + (PortOpen(Port) ? "（运行中）" : "（未运行）") + "\n" +
                 "worker：" + worker + "\n" +
+                "托盘：" + (Process.GetProcessesByName("OperatorTray").Length > 0 ? "运行中" : "未运行") + "\n" +
                 "node：" + (node ?? "未找到") + "\n\n" +
                 "启动：双击 Operator.exe\n" +
                 "只起服务：Operator.exe --silent\n" +
