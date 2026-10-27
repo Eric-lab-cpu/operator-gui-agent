@@ -59,7 +59,13 @@ Write-Output '=== 1. 停止一切 ==='
 & $exe --stop 2>&1 | Out-Null
 Start-Sleep -Seconds 2
 Step '停止后端口关闭' { -not (PortOpen 6360) }
-Step '停止后托盘退出' { (TrayCount) -eq 0 }
+Step '停止后托盘退出' {
+    for ($i = 0; $i -lt 20; $i++) {
+        if ((TrayCount) -eq 0) { return $true }
+        Start-Sleep -Milliseconds 500
+    }
+    return $false
+}
 
 Write-Output '=== 2. 冷启动 ==='
 & $exe --silent

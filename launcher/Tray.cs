@@ -32,7 +32,7 @@ namespace OperatorTray
         {
             try
             {
-                if (LogPath == "") LogPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tray.log");
+                if (LogPath == "") LogPath = Path.Combine(string.IsNullOrEmpty(AppDir) ? AppDomain.CurrentDomain.BaseDirectory : AppDir, "tray.log");
                 File.AppendAllText(LogPath, DateTime.Now.ToString("HH:mm:ss") + " " + msg + "\r\n");
             }
             catch { }
@@ -90,10 +90,38 @@ namespace OperatorTray
             timer.Tick += (s, e) => Refresh();
             timer.Start();
 
+            // 停止信号单独用高频定时器检查，保证 --stop 后 1 秒内退出
+            var stopWatch = new System.Windows.Forms.Timer { Interval = 800 };
+            stopWatch.Tick += (s, e) =>
+            {
+                try
+                {
+                    string flag = Path.Combine(AppDir, "ipc", "stop.flag");
+                    if (!File.Exists(flag)) return;
+                    File.Delete(flag);
+                    Log("收到停止信号，退出托盘");
+                    stopWatch.Stop();
+                    timer.Stop();
+                    tray.Visible = false;
+                    tray.Dispose();
+                    Application.Exit();
+                }
+                catch { }
+            };
+            stopWatch.Start();
+
             Refresh();
 
             if (!startHidden) form.Show();
-            Application.Run();
+            try
+            {
+                Application.Run();
+            }
+            catch (Exception e)
+            {
+                Log("Application.Run 崩溃: " + e);
+                throw;
+            }
         }
 
         // ── 配置 ─────────────────────────────────────────────

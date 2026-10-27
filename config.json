@@ -2,12 +2,10 @@
   "port": 6360,
   "node": "",
   "agent": {
-    "defaultProvider": "deepseek",
-    "defaultModel": "deepseek-chat",
-    "maxSteps": 10,
-    "baseUrl": "http://127.0.0.1:11434",
-    "provider": "ollama",
-    "model": "gemma4:e4b"
+    "provider": "deepseek",
+    "model": "deepseek-chat",
+    "baseUrl": "https://api.deepseek.com/v1",
+    "maxSteps": 8
   },
   "worker": {
     "taskName": "DSH-GUI-Worker"
